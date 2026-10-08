@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Добеги до квартиры — KeysToMoscow</title>
-<meta name="description" content="Москва. Квартира мечты. Один шанс. Аркада про аренду: перепрыгивай риелторов и снимай квартиры без комиссии.">
+<meta name="description" content="Москва. Квартира мечты. Один шанс. Аркада про аренду: прыгай, пригибайся и читай объявления на бегу.">
 <meta name="theme-color" content="#1C1C1C">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Добеги до квартиры">
@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" media="print" onload="this.media='all'"
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@700;800;900&display=swap">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2.0">
 
 <!-- Telegram WebApp SDK подключается, только если игра открыта внутри Telegram.
      В обычном браузере он не нужен; если не загрузится — игра работает как обычно -->
@@ -46,105 +46,164 @@
 <div id="app">
   <canvas id="stage" aria-label="Игровое поле"></canvas>
 
-  <!-- Счёт и рекорд -->
-  <header class="hud" id="hud">
+  <!-- Дистанция, очки, рекорд -->
+  <header class="hud is-hidden" id="hud">
     <div class="hud__left">
-      <div class="hud__title">
-        <svg class="key" viewBox="0 0 48 48" aria-hidden="true"><use href="#i-key"/></svg>
-        Добеги до квартиры
-      </div>
-      <div class="hud__score" id="hudScore">0</div>
-      <div class="hud__meta">
-        <span id="hudMeters">0 м</span>
-        <span class="hud__flats"><svg class="key" viewBox="0 0 48 48" aria-hidden="true"><use href="#i-key"/></svg><span id="hudFlats">0</span></span>
+      <div class="hud__dist"><span id="hudMeters">0</span><small>м</small></div>
+      <div class="hud__row">
+        <span class="hud__score" id="hudScoreWrap"><b id="hudScore">0</b> <span id="hudScoreLabel">очков</span></span>
+        <span class="combo" id="hudCombo" hidden><b id="hudComboMult">×2</b><span id="hudComboNext"></span></span>
       </div>
     </div>
     <div class="hud__right">
-      <div class="hud__buttons">
-        <button class="icon-btn" id="btnMusic" type="button" aria-label="Музыка" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 17.5V6l10-2v11.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="6.5" cy="17.5" r="2.6" fill="currentColor"/><circle cx="16.5" cy="15.5" r="2.6" fill="currentColor"/>
-            <path class="off" d="M4 3.5l16 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="icon-btn" id="btnSound" type="button" aria-label="Звук" aria-pressed="true">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3.5 9.5v5H7l4.5 3.8V5.7L7 9.5H3.5Z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-            <path class="on" d="M15 9.2a4 4 0 0 1 0 5.6M17.6 6.6a7.6 7.6 0 0 1 0 10.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <path class="off" d="M15.5 9.5l5 5m0-5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
-      </div>
+      <button class="icon-btn" id="btnPause" type="button" aria-label="Пауза"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pause"/></svg></button>
       <div class="hud__record" id="hudRecord"><span id="hudRecordLabel">Рекорд</span> <b id="hudBest">0</b></div>
     </div>
   </header>
 
   <div class="toast-slot" id="toastSlot" aria-live="polite"></div>
   <div class="hint" id="hint" hidden></div>
+  <div class="countdown" id="countdown" hidden></div>
 
-  <!-- Первый экран -->
-  <section class="screen screen--start" id="startScreen">
-    <div class="start">
-      <div class="start__brand">KeysToMoscow</div>
-      <h1 class="start__title">Добеги<br>до квартиры</h1>
-      <p class="start__sub">Москва. Квартира мечты. Один шанс.</p>
-      <p class="start__hint">
-        <span class="only-touch">Тапни, чтобы прыгнуть</span>
-        <span class="only-mouse">Пробел или клик — прыжок</span>
-      </p>
-      <div class="start__timer"><i id="startTimer"></i></div>
-      <p class="start__record" id="startRecord" hidden>Рекорд <b id="startBest">0</b></p>
+  <!-- Главное меню -->
+  <section class="screen screen--menu" id="screenMenu">
+    <div class="menu">
+      <div class="menu__head">
+        <div class="menu__brand">KeysToMoscow</div>
+        <h1 class="menu__title">Добеги<br>до квартиры</h1>
+        <p class="menu__sub">Москва. Квартира мечты. Один шанс.</p>
+      </div>
+      <div class="menu__body">
+        <p class="challenge" id="menuChallenge" hidden></p>
+        <button class="btn btn--primary btn--xl" id="btnPlay" type="button">Играть</button>
+        <p class="menu__record"><span id="menuName"></span>Рекорд: <b id="menuBest">0</b></p>
+        <div class="menu__links">
+          <button class="btn btn--dark" id="btnLeaders" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cup"/></svg>Таблица лидеров</button>
+          <button class="btn btn--dark" id="btnHowto" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-help"/></svg>Как играть</button>
+          <button class="btn btn--dark" id="btnSettings" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear"/></svg>Настройки</button>
+        </div>
+      </div>
     </div>
   </section>
 
-  <!-- Пауза (когда вкладку свернули) -->
-  <section class="screen screen--pause" id="pauseScreen" hidden>
-    <div>
-      <h2>Пауза</h2>
-      <p><span class="only-touch">Тапни, чтобы продолжить</span><span class="only-mouse">Пробел или клик — продолжить</span></p>
+  <!-- Имя игрока -->
+  <section class="screen screen--modal" id="screenName" hidden>
+    <div class="sheet sheet--narrow" role="dialog" aria-labelledby="nameHead">
+      <h2 class="sheet__head" id="nameHead">Как тебя зовут?</h2>
+      <p class="sheet__note">Имя появится в таблице лидеров</p>
+      <input class="field" id="nameInput" type="text" maxlength="16" placeholder="Например, Артём" autocomplete="off" autocapitalize="words" enterkeyhint="done">
+      <button class="btn btn--primary" id="btnNameOk" type="button">Готово</button>
+      <button class="btn btn--text" id="btnNameSkip" type="button">Пропустить</button>
+    </div>
+  </section>
+
+  <!-- Как играть -->
+  <section class="screen screen--modal" id="screenHowto" hidden>
+    <div class="sheet" role="dialog" aria-labelledby="howtoHead">
+      <h2 class="sheet__head" id="howtoHead">Как играть</h2>
+      <ul class="howto">
+        <li>
+          <span class="howto__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-tap"/></svg></span>
+          <span><b><span class="only-touch">Тап — прыжок</span><span class="only-mouse">Пробел или клик — прыжок</span></b>Через коробки, урны и риелторов. На машины можно запрыгивать.</span>
+        </li>
+        <li>
+          <span class="howto__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-down"/></svg></span>
+          <span><b><span class="only-touch">Свайп вниз — пригнуться</span><span class="only-mouse">Стрелка вниз — пригнуться</span></b>Под вывесками, балками и шлагбаумами.</span>
+        </li>
+        <li>
+          <span class="howto__icon"><svg viewBox="0 0 48 48" aria-hidden="true"><use href="#i-key"/></svg></span>
+          <span><b>Читай объявления</b>Много метров, мало рублей, метро рядом — прыгай и бери. Дорого или далеко — беги мимо.</span>
+        </li>
+        <li>
+          <span class="howto__icon howto__icon--text">×2</span>
+          <span><b>Собирай серию</b>3 хорошие квартиры подряд — ×2, 5 — ×3, 10 — ×5. Плохая сжигает серию.</span>
+        </li>
+      </ul>
+      <button class="btn btn--primary" data-back type="button">Понятно</button>
+    </div>
+  </section>
+
+  <!-- Настройки -->
+  <section class="screen screen--modal" id="screenSettings" hidden>
+    <div class="sheet sheet--narrow" role="dialog" aria-labelledby="settingsHead">
+      <h2 class="sheet__head" id="settingsHead">Настройки</h2>
+      <div class="rows">
+        <button class="row" id="setSound" type="button" aria-pressed="true"><span>Звук</span><b></b></button>
+        <button class="row" id="setMusic" type="button" aria-pressed="false"><span>Музыка</span><b></b></button>
+        <button class="row" id="setHaptics" type="button" aria-pressed="true"><span>Вибрация</span><b></b></button>
+        <button class="row" id="setName" type="button"><span>Имя</span><b id="setNameValue"></b></button>
+      </div>
+      <button class="btn btn--primary" data-back type="button">Готово</button>
+    </div>
+  </section>
+
+  <!-- Таблица лидеров -->
+  <section class="screen screen--modal" id="screenLeaders" hidden>
+    <div class="sheet" role="dialog" aria-labelledby="leadersHead">
+      <h2 class="sheet__head" id="leadersHead">Таблица лидеров</h2>
+      <p class="leaders__you" id="leadersYou"></p>
+      <ol class="leaders" id="leadersList"></ol>
+      <p class="sheet__note" id="leadersNote" hidden>Пока это демо-таблица: соперники в ней ненастоящие. Общий рейтинг появится позже.</p>
+      <button class="btn btn--primary" data-back type="button">Назад</button>
+    </div>
+  </section>
+
+  <!-- Пауза -->
+  <section class="screen screen--modal" id="screenPause" hidden>
+    <div class="sheet sheet--narrow" role="dialog" aria-labelledby="pauseHead">
+      <h2 class="sheet__head sheet__head--big" id="pauseHead">Пауза</h2>
+      <button class="btn btn--primary btn--xl" id="btnResume" type="button">Продолжить</button>
+      <button class="btn btn--ghost" id="btnPauseRestart" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-restart"/></svg>Начать заново</button>
+      <button class="btn btn--ghost" id="btnPauseMenu" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>Выйти в меню</button>
+      <button class="row row--compact" id="pauseSound" type="button" aria-pressed="true"><span>Звук</span><b></b></button>
     </div>
   </section>
 
   <!-- Конец игры -->
-  <section class="screen screen--over" id="overScreen" hidden>
-    <div class="panel" id="overPanel" role="dialog" aria-labelledby="overHead">
-      <div class="panel__top">
-        <h2 class="panel__head" id="overHead">Тебя опередили</h2>
-        <p class="panel__cause" id="overCause"></p>
-        <div class="panel__dist"><span id="overMeters">0</span><small>м</small></div>
+  <section class="screen screen--modal screen--over" id="screenOver" hidden>
+    <div class="sheet sheet--over" id="overPanel" role="dialog" aria-labelledby="overHead">
+      <div class="over__top">
+        <h2 class="sheet__head" id="overHead">Квартиру уже сдали</h2>
+        <p class="over__cause" id="overCause"></p>
+        <div class="over__dist"><span id="overMeters">0</span><small>м</small></div>
+        <p class="over__score"><b id="overScore">0</b> <span id="overScoreLabel">очков</span></p>
       </div>
-      <div class="panel__bottom">
-        <div class="panel__stats">
-          <div class="stat"><b id="overFlats">0</b><span id="overFlatsLabel">квартир снято</span></div>
-          <div class="stat"><b id="overScore">0</b><span id="overScoreLabel">очков</span></div>
+      <div class="over__bottom">
+        <div class="over__record" id="overRecord"><span id="overRecordLabel">Рекорд</span> <b id="overBest">0</b></div>
+        <p class="over__line" id="overCompare"></p>
+        <p class="over__line over__line--muted" id="overExtra"></p>
+        <button class="btn btn--primary btn--xl" id="btnRetry" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-restart"/></svg>Ещё раз</button>
+        <div class="over__row">
+          <button class="btn btn--ghost" id="btnShare" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-share"/></svg><span id="shareLabel">Поделиться</span></button>
+          <button class="btn btn--ghost" id="btnOverMenu" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>В меню</button>
         </div>
-        <div class="panel__record" id="overRecord"><span id="overRecordLabel">Твой рекорд</span> <b id="overBest">0</b></div>
-        <div class="rank">
-          <div class="rank__text">Ты лучше, чем <b id="overRank">0%</b> игроков</div>
-          <div class="rank__bar"><i id="overRankBar"></i></div>
-        </div>
-        <button class="btn btn--primary" id="btnRetry" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 3.8v4h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Попробовать ещё
-        </button>
-        <button class="btn btn--ghost" id="btnShare" type="button">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5 21 3Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span id="shareLabel">Поделиться рекордом</span>
-        </button>
       </div>
     </div>
   </section>
 </div>
 
-<!-- Фирменный ключ -->
+<!-- Иконки -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-key" viewBox="0 0 48 48">
-    <path fill="currentColor" fill-rule="evenodd" d="M18.95 21.87 5 38l1.4 7h8l-.8-4H18l-.7-4.4 4 .2-.5-4.2 5.2-.3 2.74-2.5A13 13 0 1 0 18.95 21.87ZM34 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
-  </symbol>
+  <symbol id="i-key" viewBox="0 0 48 48"><path fill="currentColor" fill-rule="evenodd" d="M18.95 21.87 5 38l1.4 7h8l-.8-4H18l-.7-4.4 4 .2-.5-4.2 5.2-.3 2.74-2.5A13 13 0 1 0 18.95 21.87ZM34 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5.5v13M15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 3.8v4h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5 21 3Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5M6.5 10v9.5h11V10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M7.5 4.5h9v5a4.5 4.5 0 0 1-9 0v-5ZM7.5 6.5H4.5c0 3 1.2 4.5 3.4 4.8M16.5 6.5h3c0 3-1.2 4.5-3.4 4.8M12 14v4M8.5 19.5h7" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.9" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M12 3.5v2.6M12 17.9v2.6M3.5 12h2.6M17.9 12h2.6M6 6l1.8 1.8M16.2 16.2 18 18M18 6l-1.8 1.8M7.8 16.2 6 18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+  <symbol id="i-tap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3.3"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v15M6 13.5l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
-<script src="apartments.js"></script>
-<script src="game.js"></script>
+<script src="js/config.js?v=2.0"></script>
+<script src="js/content.js?v=2.0"></script>
+<script src="apartments.js?v=2.0"></script>
+<script src="js/core.js?v=2.0"></script>
+<script src="js/audio.js?v=2.0"></script>
+<script src="js/art.js?v=2.0"></script>
+<script src="js/city.js?v=2.0"></script>
+<script src="js/ui.js?v=2.0"></script>
+<script src="js/game.js?v=2.0"></script>
 </body>
 </html>
