@@ -412,16 +412,17 @@ const BackArt = {
 /* ───────────────────────────── ФАСАДЫ ─────────────────────────────
    Ближний ряд домов в настоящем масштабе: первый этаж с магазинами и вывесками. */
 const STYLES = {
-  panel:      { w: [230, 330], floors: [5, 7],  floorH: 60, groundH: 66,  bayW: 46, win: 'panel',  ground: 'plain', roof: 'flat' },
-  panelShop:  { w: [240, 340], floors: [5, 7],  floorH: 60, groundH: 90,  bayW: 46, win: 'panel',  ground: 'shop',  roof: 'flat' },
-  khrush:     { w: [250, 340], floors: [4, 4],  floorH: 56, groundH: 60,  bayW: 42, win: 'rect',   ground: 'plain', roof: 'hip' },
-  stalin:     { w: [240, 320], floors: [4, 6],  floorH: 72, groundH: 98,  bayW: 54, win: 'tall',   ground: 'rust',  roof: 'cornice', pilasters: true },
-  stalinShop: { w: [240, 320], floors: [4, 6],  floorH: 72, groundH: 100, bayW: 54, win: 'tall',   ground: 'shop',  roof: 'cornice', pilasters: true },
-  old:        { w: [190, 270], floors: [1, 3],  floorH: 80, groundH: 92,  bayW: 50, win: 'arched', ground: 'plain', roof: 'mansard', bands: true },
-  oldShop:    { w: [190, 270], floors: [1, 3],  floorH: 80, groundH: 100, bayW: 50, win: 'arched', ground: 'shop',  roof: 'mansard', bands: true },
+  // ac — доля окон с кондиционером (%), pipes — водосточные трубы, brick — кирпичная кладка
+  panel:      { w: [230, 330], floors: [5, 7],  floorH: 60, groundH: 66,  bayW: 46, win: 'panel',  ground: 'plain', roof: 'flat', ac: 16 },
+  panelShop:  { w: [250, 340], floors: [5, 7],  floorH: 60, groundH: 96,  bayW: 46, win: 'panel',  ground: 'shop',  roof: 'flat', ac: 16 },
+  khrush:     { w: [250, 340], floors: [4, 4],  floorH: 56, groundH: 60,  bayW: 42, win: 'rect',   ground: 'plain', roof: 'hip', ac: 12, pipes: true, brick: true },
+  stalin:     { w: [240, 320], floors: [4, 6],  floorH: 72, groundH: 98,  bayW: 54, win: 'tall',   ground: 'rust',  roof: 'cornice', pilasters: true, ac: 7, pipes: true },
+  stalinShop: { w: [250, 330], floors: [4, 6],  floorH: 72, groundH: 104, bayW: 54, win: 'tall',   ground: 'shop',  roof: 'cornice', pilasters: true, ac: 7, pipes: true },
+  old:        { w: [190, 270], floors: [1, 3],  floorH: 80, groundH: 92,  bayW: 50, win: 'arched', ground: 'plain', roof: 'mansard', bands: true, pipes: true },
+  oldShop:    { w: [200, 280], floors: [1, 3],  floorH: 80, groundH: 104, bayW: 50, win: 'arched', ground: 'shop',  roof: 'mansard', bands: true, pipes: true },
   glass:      { w: [210, 300], floors: [8, 12], floorH: 54, groundH: 112, bayW: 40, win: 'strip',  ground: 'lobby', roof: 'none' },
   newbuild:   { w: [220, 300], floors: [6, 9],  floorH: 62, groundH: 86,  bayW: 50, win: 'modern', ground: 'plain', roof: 'flat' },
-  newShop:    { w: [220, 300], floors: [6, 9],  floorH: 62, groundH: 100, bayW: 50, win: 'modern', ground: 'shop',  roof: 'flat' },
+  newShop:    { w: [230, 310], floors: [6, 9],  floorH: 62, groundH: 104, bayW: 50, win: 'modern', ground: 'shop',  roof: 'flat' },
 };
 
 function drawWindow(k, type, cx, y0, bw, fH, col, h, fl, b) {
@@ -429,16 +430,28 @@ function drawWindow(k, type, cx, y0, bw, fH, col, h, fl, b) {
   const glass = lit ? col.lit : col.glass;
   if (type === 'rect' || type === 'panel') {
     const ww = bw * (type === 'panel' ? 0.56 : 0.5), wh = fH * 0.5, x = cx - ww / 2, y = y0 - fH * 0.24 - wh;
-    if (type === 'panel' && (h >> 8) % 3 === 0) {       // балкон
-      k.fillStyle = col.dark;
-      k.fillRect(cx - bw * 0.42, y0 - fH * 0.5, bw * 0.84, fH * 0.34);
-      k.fillStyle = col.trim;
-      k.fillRect(cx - bw * 0.42, y0 - fH * 0.5, bw * 0.84, 2.5);
+    const balcony = type === 'panel' && (h >> 8) % 3 === 0;
+    if (balcony && (h >> 12) % 3) {                     // лоджия застеклена: каждый стеклил как мог
+      const tones = ['#F2F2EF', '#E6E1D6', '#DDE4E8'];
+      k.fillStyle = tones[(h >> 14) % 3];
+      k.fillRect(cx - bw * 0.44, y0 - fH * 0.86, bw * 0.88, fH * 0.7);
+      k.fillStyle = glass;
+      k.fillRect(cx - bw * 0.4, y0 - fH * 0.82, bw * 0.8, fH * 0.36);
+      k.fillStyle = tones[(h >> 14) % 3];
+      k.fillRect(cx - bw * 0.14, y0 - fH * 0.82, 1.6, fH * 0.36);
+      k.fillRect(cx + bw * 0.13, y0 - fH * 0.82, 1.6, fH * 0.36);
+      return;
     }
     k.fillStyle = glass;
     k.fillRect(x, y, ww, wh);
     k.fillStyle = col.wall;
     k.fillRect(cx - 0.8, y, 1.6, wh);
+    if (balcony) {                                      // открытый балкон с ограждением
+      k.fillStyle = col.dark;
+      k.fillRect(cx - bw * 0.42, y0 - fH * 0.5, bw * 0.84, fH * 0.34);
+      k.fillStyle = col.trim;
+      k.fillRect(cx - bw * 0.42, y0 - fH * 0.5, bw * 0.84, 2.5);
+    }
   } else if (type === 'tall') {
     const ww = bw * 0.42, wh = fH * 0.62, x = cx - ww / 2, y = y0 - fH * 0.2 - wh;
     k.fillStyle = col.trim;
@@ -476,39 +489,172 @@ function drawWindow(k, type, cx, y0, bw, fH, col, h, fl, b) {
   }
 }
 
-function drawSignBoard(k, name, cx, yTop, maxW, wall, height) {
-  const brand = K.BRANDS[name] || { bg: '#FFFFFF', fg: C.ink };
-  const hgt = height || 26;
-  k.font = `800 14px ${FONT.display}`;
-  const w = clamp(k.measureText(name).width + 30, 84, maxW);
-  rr(k, cx - w / 2, yTop, w, hgt, 5);
-  k.fillStyle = soft(brand.bg, wall);
-  k.fill();
-  text(k, name, cx, yTop + hgt / 2 + 0.5, w - 16, 14, soft(brand.fg, brand.bg));
-  return w;
+/* Что стоит в витрине: зависит от типа заведения */
+function shopWindow(k, cat, b, x, y, w, h, seed) {
+  if (w < 16) return;
+  const bg = b.bg, cx = x + w / 2;
+  if (cat === 'grocery') {
+    // жёлтые ценники и плакаты «акция»
+    const n = Math.max(1, Math.floor(w / 34));
+    for (let i = 0; i < n; i++) {
+      const px = x + (i + 0.5) * w / n - 12, yellow = (seed + i) % 2 === 0;
+      k.fillStyle = yellow ? '#FFD400' : bg;
+      k.fillRect(px, y + 6, 24, 30);
+      text(k, yellow ? '−30%' : 'АКЦИЯ', px + 12, y + 17, 20, yellow ? 8 : 5.6, yellow ? '#D7141A' : b.fg, 900, K.SIGN_FONT.mont);
+      k.fillStyle = yellow ? '#1C1C1C' : b.fg;
+      k.fillRect(px + 4, y + 26, 16, 1.6);
+      k.fillRect(px + 6, y + 30, 12, 1.6);
+    }
+    k.fillStyle = bg;
+    k.fillRect(x, y + h - 10, w, 10);
+  } else if (cat === 'alcohol') {
+    // окна заклеены плёнкой с бутылками
+    k.fillStyle = bg;
+    k.fillRect(x, y, w, h);
+    k.fillStyle = 'rgba(255,255,255,.9)';
+    for (let bx = x + 9; bx < x + w - 8; bx += 15) { k.fillRect(bx, y + h - 34, 7, 26); k.fillRect(bx + 2, y + h - 44, 3, 11); }
+  } else if (cat === 'pvz') {
+    K.sign(k, b.name, cx - Math.min(w * 0.42, 30), y + 8, Math.min(w * 0.84, 60), 16, { radius: 3 });
+    text(k, 'ПУНКТ ВЫДАЧИ', cx, y + 33, w - 6, 5.6, '#4A4A4A', 800, FONT.text);
+    k.fillStyle = bg;
+    k.fillRect(x, y + h - 8, w, 8);
+  } else if (cat === 'cafe' || cat === 'fastfood') {
+    // столик у окна и меню
+    k.fillStyle = 'rgba(60,45,35,.55)';
+    k.fillRect(cx - 9, y + h - 20, 18, 2.4);
+    k.fillRect(cx - 1.2, y + h - 20, 2.4, 20);
+    k.beginPath(); dot(k, cx - 16, y + h - 24, 4.4); dot(k, cx + 16, y + h - 24, 4.4); k.fill();
+    k.fillRect(cx - 20, y + h - 20, 8, 20);
+    k.fillRect(cx + 12, y + h - 20, 8, 20);
+    if (w > 46) { k.fillStyle = '#2B2B2B'; k.fillRect(x + 4, y + 6, 16, 22); k.fillStyle = '#EDEDED'; for (let i = 0; i < 4; i++) k.fillRect(x + 6, y + 9 + i * 5, 12 - (i % 2) * 4, 1.4); }
+  } else if (cat === 'bank') {
+    // банкомат
+    const ax = x + (seed % 2 ? 4 : w - 30);
+    k.fillStyle = '#3B4048';
+    k.fillRect(ax, y + h - 50, 26, 50);
+    k.fillStyle = '#BFE3F5';
+    k.fillRect(ax + 4, y + h - 45, 18, 13);
+    k.fillStyle = '#9AA1AA';
+    k.fillRect(ax + 4, y + h - 28, 18, 9);
+    k.fillStyle = bg === '#FFFFFF' ? b.fg : bg;
+    k.fillRect(ax, y + h - 54, 26, 5);
+    text(k, '24', ax + 13, y + h - 12, 20, 6.5, '#EDEDED', 900, K.SIGN_FONT.mont);
+  } else if (cat === 'pharmacy') {
+    // зелёный крест и полки с коробочками
+    k.fillStyle = '#00A651';
+    k.fillRect(x + 4, y + 5, 20, 20);
+    k.fillStyle = '#FFFFFF';
+    k.fillRect(x + 11.5, y + 8, 5, 14);
+    k.fillRect(x + 7, y + 12.5, 14, 5);
+    for (let sy = y + 30; sy < y + h - 6; sy += 13) {
+      k.fillStyle = '#FFFFFF';
+      k.fillRect(x + 3, sy + 9, w - 6, 1.6);
+      for (let i = 0, bx = x + 5; bx < x + w - 10; i++, bx += 9) { k.fillStyle = ['#7FC8A9', '#F2B5A7', '#F6E08A', '#A9C7F2'][(seed + i) % 4]; k.fillRect(bx, sy + 1, 7, 8); }
+    }
+  } else if (cat === 'realty') {
+    // объявления, наклеенные прямо на стекло
+    const cols = Math.max(1, Math.floor((w - 6) / 15));
+    for (let r = 0; r < 3; r++) for (let c = 0; c < cols; c++) {
+      const px = x + 4 + c * ((w - 8) / cols), py = y + 6 + r * 19;
+      k.fillStyle = '#FFFFFF';
+      k.fillRect(px, py, 12, 16);
+      k.fillStyle = (seed + r + c) % 4 === 0 ? '#E0443A' : '#9AA1AA';
+      k.fillRect(px + 2, py + 2, 8, 5);
+      k.fillStyle = '#9AA1AA';
+      k.fillRect(px + 2, py + 9, 8, 1.2);
+      k.fillRect(px + 2, py + 12, 5, 1.2);
+    }
+  } else if (cat === 'telecom') {
+    // телефоны на плакатах
+    for (let i = 0, px = x + 6; px < x + w - 14; i++, px += 20) {
+      rr(k, px, y + 8, 13, 26, 2.5); k.fillStyle = '#2B2B2B'; k.fill();
+      k.fillStyle = i % 2 ? bg : '#BFE3F5';
+      k.fillRect(px + 1.6, y + 10.5, 9.8, 19);
+    }
+    k.fillStyle = bg;
+    k.fillRect(x, y + h - 9, w, 9);
+  } else if (cat === 'developer') {
+    // макет жилого комплекса
+    k.fillStyle = '#FFFFFF';
+    k.fillRect(cx - 22, y + h - 16, 44, 4);
+    k.fillRect(cx - 18, y + h - 40, 10, 24);
+    k.fillRect(cx - 5, y + h - 52, 10, 36);
+    k.fillRect(cx + 8, y + h - 32, 10, 16);
+    text(k, 'ОФИС ПРОДАЖ', cx, y + 9, w - 6, 5.6, '#4A4A4A', 800, FONT.text);
+  } else {
+    // обычный магазин: полки с товаром
+    for (let sy = y + 8; sy < y + h - 6; sy += 17) {
+      k.fillStyle = 'rgba(255,255,255,.8)';
+      k.fillRect(x + 3, sy + 12, w - 6, 1.8);
+      for (let i = 0, bx = x + 5; bx < x + w - 10; i++, bx += 10) {
+        k.fillStyle = [bg, '#F2D7A0', '#D9D9D9', '#F2B5A7'][(seed + i + sy) % 4 | 0];
+        const hh = 6 + ((seed + i) % 3) * 2;
+        k.fillRect(bx, sy + 12 - hh, 7, hh);
+      }
+    }
+  }
+}
+
+/* Один магазин на первом этаже: вывеска в фирменном стиле, витрина, дверь */
+function shopUnit(k, x, w, gH, name, col, seed) {
+  const b = K.BRANDS[name] || { name, cat: 'retail', bg: '#FFFFFF', fg: '#1C1C1C' };
+  const cat = b.cat, top = -gH;
+  const fh = Math.min(30, Math.max(22, w * 0.19));                  // высота вывески
+  const gx = x + 6, gw = w - 12, gTop = top + fh + 10, gh = -9 - gTop;
+  const tinted = cat === 'grocery' || cat === 'alcohol' || cat === 'pvz' || cat === 'fastfood' || cat === 'pharmacy';
+  const frame = tinted && b.bg !== '#FFFFFF' ? mix(b.bg, '#2F2F2F', 0.45) : '#4F555C';
+
+  // стекло с бликом
+  k.fillStyle = col.glass;
+  k.fillRect(gx, gTop, gw, gh);
+  k.fillStyle = 'rgba(255,255,255,.22)';
+  k.beginPath(); poly(k, [gx + gw * 0.12, gTop, gx + gw * 0.3, gTop, gx + gw * 0.1, gTop + gh, gx, gTop + gh, gx, gTop + gh * 0.5]); k.fill();
+
+  // дверь: у супермаркета — раздвижная по центру, у остальных — сбоку
+  const dw = Math.min(cat === 'grocery' ? 46 : 36, gw * 0.46), dh = Math.min(66, gh - 3);
+  const center = cat === 'grocery' || cat === 'fastfood';
+  const dx = center ? gx + gw / 2 - dw / 2 : (seed % 2 ? gx + 4 : gx + gw - dw - 4);
+
+  shopWindow(k, cat, b, gx, gTop, dx - gx - 3, gh, seed);
+  shopWindow(k, cat, b, dx + dw + 3, gTop, gx + gw - dx - dw - 3, gh, seed + 3);
+
+  // рамы
+  k.fillStyle = frame;
+  k.fillRect(gx - 2, gTop - 2, gw + 4, 2.5);
+  k.fillRect(gx - 2, gTop - 2, 2.5, gh + 2);
+  k.fillRect(gx + gw - 0.5, gTop - 2, 2.5, gh + 2);
+  k.fillRect(dx - 3, -9 - dh - 3, dw + 6, dh + 3);
+  k.fillStyle = mix(col.glass, '#FFFFFF', 0.35);
+  k.fillRect(dx, -9 - dh, dw, dh);
+  k.fillStyle = frame;
+  if (center) k.fillRect(dx + dw / 2 - 1, -9 - dh, 2, dh);
+  else k.fillRect(dx + (seed % 2 ? dw - 6 : 3), -9 - dh * 0.55, 2.5, 12);
+  if (cat === 'cafe') {                                             // маркиза в фирменный цвет
+    k.fillStyle = b.bg === '#FFFFFF' ? b.fg : b.bg;
+    k.beginPath(); poly(k, [gx - 3, gTop - 2, gx + gw + 3, gTop - 2, gx + gw + 7, gTop + 9, gx - 7, gTop + 9]); k.fill();
+    k.fillStyle = 'rgba(255,255,255,.4)';
+    for (let sx = gx; sx < gx + gw; sx += 16) k.fillRect(sx, gTop - 2, 8, 11);
+  }
+
+  // цоколь и ступенька
+  k.fillStyle = col.dark;
+  k.fillRect(x, -9, w, 9);
+  k.fillStyle = col.trim;
+  k.fillRect(dx - 6, -5, dw + 12, 5);
+
+  K.fascia(k, name, x + 2, top + 5, w - 4, fh);
 }
 
 function drawGroundFloor(k, f, bays, bw, pad) {
   const st = f.style, col = f.col, W = f.w, gH = st.groundH;
   if (st.ground === 'shop') {
+    // первый этаж поделён между несколькими заведениями
     k.fillStyle = col.base;
     k.fillRect(0, -gH, W, gH);
-    k.fillStyle = col.glass;
-    k.fillRect(pad, -(gH - 36), W - pad * 2, gH - 45);
-    k.fillStyle = col.base;
-    for (let b = 1; b < bays; b++) k.fillRect(pad + b * bw - 2, -(gH - 36), 4, gH - 45);
-    // дверь
-    const db = 1 + (f.seed % Math.max(1, bays - 2));
-    k.fillStyle = col.dark;
-    k.fillRect(pad + db * bw + bw * 0.2, -68, bw * 0.6, 60);
-    k.fillStyle = col.glass;
-    k.fillRect(pad + db * bw + bw * 0.2 + 4, -64, bw * 0.6 - 8, 40);
     k.fillStyle = col.dark;
     k.fillRect(0, -9, W, 9);
-    // вывески
-    const names = f.brands;
-    if (names.length === 1) drawSignBoard(k, names[0], W / 2, -(gH - 5), W - pad * 2 - 10, col.wall);
-    else { drawSignBoard(k, names[0], W * 0.27, -(gH - 5), W * 0.46, col.wall); drawSignBoard(k, names[1], W * 0.74, -(gH - 5), W * 0.44, col.wall); }
+    let x = 5;
+    for (const u of f.units) { shopUnit(k, x, u.w, gH, u.name, col, f.seed + Math.round(x)); x += u.w + 5; }
   } else if (st.ground === 'rust') {
     k.fillStyle = col.base;
     k.fillRect(0, -gH, W, gH);
@@ -544,7 +690,7 @@ function drawGroundFloor(k, f, bays, bw, pad) {
     k.fillRect(W * 0.42 + 4, -62, W * 0.16 - 8, 56);
     k.fillStyle = col.dark;
     k.fillRect(0, -7, W, 7);
-    if (f.brands.length) drawSignBoard(k, f.brands[0], W * 0.5, -(gH - 12), W * 0.5, col.glass, 24);
+    if (f.brands.length) K.sign(k, f.brands[0], W * 0.5 - 64, -(gH - 14), 128, 27, { radius: 3 });
   } else {
     k.fillStyle = col.base;
     k.fillRect(0, -gH, W, gH);
@@ -613,6 +759,34 @@ function drawFacade(k, f) {
   }
   if (st.win === 'panel') { k.fillStyle = col.dark; for (let b = 0; b <= bays; b++) k.fillRect(pad + b * bw - 0.5, top, 1, -top - gH); }
   if (st.pilasters) { k.fillStyle = col.trim; for (let b = 0; b <= bays; b += 2) k.fillRect(pad + b * bw - 3.5, top, 7, -top - gH); }
+  if (st.brick) {                                       // кирпичная кладка
+    k.fillStyle = 'rgba(0,0,0,.05)';
+    for (let y = top + 5; y < -gH; y += 5) k.fillRect(0, y, W, 1);
+  }
+  if (st.ac) {                                          // кондиционеры под окнами
+    for (let fl = 0; fl < floors; fl++) for (let b = 0; b < bays; b++) {
+      if (hash3(f.seed, fl + 40, b) % 100 >= st.ac) continue;
+      const ax = pad + (b + 0.5) * bw + bw * 0.14, ay = -(gH + fl * fH) - fH * 0.2;
+      k.fillStyle = '#ECEDEE';
+      k.fillRect(ax, ay, 13, 8.5);
+      k.fillStyle = '#BFC3C7';
+      k.beginPath(); k.arc(ax + 4.6, ay + 4.2, 2.9, 0, TAU); k.fill();
+      k.fillRect(ax + 9, ay + 2, 2.6, 1); k.fillRect(ax + 9, ay + 4, 2.6, 1);
+    }
+  }
+  if (st.pipes) {                                       // водосточные трубы
+    k.fillStyle = col.dark;
+    for (const px of [4, W - 8]) {
+      k.fillRect(px, top + 2, 3.2, -top - 12);
+      k.fillRect(px - 1.5, top, 6.2, 5);
+      k.fillRect(px - 0.8, -(gH + fH), 4.8, 2);
+      k.beginPath(); poly(k, [px, -10, px + 3.2, -10, px + 8, -4, px + 5, -4]); k.fill();
+    }
+  }
+  if (st.roof === 'cornice') {                          // кронштейны под карнизом
+    k.fillStyle = col.trim;
+    for (let x = 6; x < W - 6; x += 13) k.fillRect(x, top, 5, 5);
+  }
   drawGroundFloor(k, f, bays, bw, pad);
   drawRoof(k, f, top);
 
@@ -668,15 +842,7 @@ const SPECIAL = {
       k.beginPath();
       for (let x = 0; x < f.w; x += 12) { k.moveTo(x, -90); k.lineTo(x + 6, -96); k.lineTo(x + 12, -90); }
       k.stroke();
-      const ad = f.ad;
-      if (ad) {
-        const brand = K.BRANDS[ad[0]];
-        rr(k, f.w * 0.3, -70, 130, 48, 4);
-        k.fillStyle = soft(brand.bg, '#C9C9C6');
-        k.fill();
-        text(k, ad[0], f.w * 0.3 + 65, -55, 116, 13, soft(brand.fg, brand.bg));
-        text(k, ad[1], f.w * 0.3 + 65, -36, 116, 9, soft(brand.fg, brand.bg), 700, FONT.text);
-      }
+      if (f.ad) K.adSign(k, f.ad[0], f.ad[1], f.w * 0.28, -74, 150, 54);
     },
   },
   stroyka: {    // строительный забор, за ним каркас будущего дома
@@ -694,12 +860,7 @@ const SPECIAL = {
       }
       k.fillStyle = '#8FB39A';
       k.fillRect(0, -90, f.w, 5);
-      const brand = K.BRANDS[f.brands[0]] || K.BRANDS['Мегаквартир'];
-      rr(k, f.w * 0.16, -76, f.w * 0.68, 56, 4);
-      k.fillStyle = soft(brand.bg, '#DADADA');
-      k.fill();
-      text(k, f.brands[0] || 'Мегаквартир', f.w * 0.5, -58, f.w * 0.6, 15, soft(brand.fg, brand.bg));
-      text(k, 'БУДЕТ БИЗНЕС-КЛАСС', f.w * 0.5, -36, f.w * 0.6, 9.5, soft(brand.fg, brand.bg), 700, FONT.text);
+      if (f.ad) K.adSign(k, f.ad[0], f.ad[1], f.w * 0.14, -82, f.w * 0.72, 64);
     },
   },
   parkFence: {  // ограда парка, за ней деревья
@@ -958,6 +1119,15 @@ const PropArt = {
       rr(ctx, 22, -234, 22, 8, 4); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,.8)';
       ctx.fillRect(25, -227, 16, 2.5);
+      if (it.note) {                                    // объявление с отрывными телефонами
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(-9, -76, 18, 20);
+        text(ctx, it.note, 0, -69, 16, 5, '#1C1C1C', 900, K.SIGN_FONT.mont);
+        ctx.fillStyle = '#B5B5B5';
+        ctx.fillRect(-6, -64, 12, 1); ctx.fillRect(-6, -61.5, 9, 1);
+        ctx.fillStyle = '#CFCFCF';
+        for (let x = -8; x < 8; x += 3) ctx.fillRect(x, -57, 0.8, 5);
+      }
     },
   },
   lampOld: {    // арбатский фонарь
@@ -990,9 +1160,7 @@ const PropArt = {
       ctx.fillRect(-50, -20, 4, 20);
       ctx.fillRect(4, -20, 4, 20);
       // рекламная панель сбоку
-      rr(ctx, 24, -78, 38, 66, 3); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
-      text(ctx, it.text[0], 43, -52, 32, 6.5, it.ink);
-      text(ctx, it.text[1], 43, -40, 32, 4.6, it.ink, 700, FONT.text);
+      K.adSign(ctx, it.ad[0], it.ad[1], 24, -78, 38, 66);
       // знак остановки
       ctx.fillStyle = it.prop;
       ctx.fillRect(84, -120, 3, 120);
@@ -1000,22 +1168,26 @@ const PropArt = {
       text(ctx, 'А', 86, -133.5, 18, 14, '#FFFFFF', 900);
     },
   },
-  kiosk: {
+  kiosk: {      // ларёк с кофе или едой
     w: 120,
     draw(ctx, it) {
       const brand = K.BRANDS[it.brand] || { bg: it.prop, fg: '#FFFFFF' };
-      rr(ctx, -46, -84, 92, 84, 5); ctx.fillStyle = 'rgba(255,255,255,.86)'; ctx.fill();
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(-46, -12, 92, 12);
-      ctx.fillStyle = 'rgba(185,205,214,.9)';
-      ctx.fillRect(-36, -62, 46, 32);
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(18, -62, 20, 62);
-      ctx.fillRect(-40, -28, 54, 4);
-      ctx.fillStyle = soft(brand.bg);
-      rr(ctx, -52, -100, 104, 22, 5); ctx.fill();
-      text(ctx, it.brand, 0, -88.5, 92, 12, soft(brand.fg, brand.bg));
-      ctx.beginPath(); poly(ctx, [-52, -78, 52, -78, 58, -68, -58, -68]); ctx.fillStyle = soft(brand.bg); ctx.fill();
+      const tone = brand.bg === '#FFFFFF' ? brand.fg : brand.bg;
+      rr(ctx, -46, -84, 92, 84, 4); ctx.fillStyle = '#F4F4F2'; ctx.fill();
+      ctx.fillStyle = tone;
+      ctx.fillRect(-46, -14, 92, 14);
+      ctx.fillStyle = 'rgba(175,200,212,.95)';
+      ctx.fillRect(-38, -62, 50, 34);
+      ctx.fillStyle = '#4F555C';
+      ctx.fillRect(-40, -64, 54, 2.5); ctx.fillRect(-40, -28, 54, 4); ctx.fillRect(-14, -62, 2, 34);
+      ctx.fillStyle = '#5E646B';
+      ctx.fillRect(20, -62, 20, 62);
+      ctx.fillStyle = 'rgba(175,200,212,.95)';
+      ctx.fillRect(23, -58, 14, 22);
+      ctx.beginPath(); poly(ctx, [-50, -76, 50, -76, 58, -64, -58, -64]); ctx.fillStyle = tone; ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      for (let x = -46; x < 50; x += 18) { ctx.beginPath(); poly(ctx, [x, -76, x + 9, -76, x + 10.5, -64, x + 0.5, -64]); ctx.fill(); }
+      K.sign(ctx, it.brand, -52, -102, 104, 25, { radius: 3 });
     },
   },
   metro: {      // вестибюль метро в настоящую величину
@@ -1041,33 +1213,31 @@ const PropArt = {
       text(ctx, 'М', 106.5, -170, 34, 26, '#E08A7E', 900);
     },
   },
-  billboard: {
+  billboard: {  // рекламный щит
     w: 230,
     draw(ctx, it) {
-      const brand = K.BRANDS[it.text[0]] || { bg: '#FFFFFF', fg: C.ink };
       ctx.fillStyle = it.prop;
       ctx.fillRect(-58, -96, 7, 96);
       ctx.fillRect(51, -96, 7, 96);
-      rr(ctx, -104, -200, 208, 108, 6); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
-      ctx.lineWidth = 3; ctx.strokeStyle = it.prop; ctx.stroke();
-      rr(ctx, -96, -192, 192, 40, 4); ctx.fillStyle = soft(brand.bg); ctx.fill();
-      text(ctx, it.text[0], 0, -171.5, 176, 21, soft(brand.fg, brand.bg));
-      text(ctx, it.text[1], 0, -124, 184, 15, it.ink, 800, FONT.text);
+      rr(ctx, -106, -204, 212, 112, 5); ctx.fill();
+      K.adSign(ctx, it.ad[0], it.ad[1], -101, -199, 202, 102);
     },
   },
-  citylight: {  // сити-формат с объявлением
+  citylight: {  // сити-формат: реклама или социальный плакат
     w: 80,
     draw(ctx, it) {
       ctx.fillStyle = it.prop;
       ctx.fillRect(-4, -34, 8, 34);
-      rr(ctx, -30, -122, 60, 90, 5); ctx.fill();
-      rr(ctx, -25, -117, 50, 80, 3); ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fill();
-      const ls = it.meme.split(' ');
-      const mid = Math.ceil(ls.length / 2);
-      text(ctx, ls.slice(0, mid).join(' '), 0, -86, 44, 9, it.ink);
-      if (ls.length > 1) text(ctx, ls.slice(mid).join(' '), 0, -72, 44, 9, it.ink);
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(-18, -56, 36, 2);
+      rr(ctx, -30, -124, 60, 92, 5); ctx.fill();
+      if (it.ad) K.adSign(ctx, it.ad[0], it.ad[1], -26, -120, 52, 84);
+      else {
+        rr(ctx, -26, -120, 52, 84, 3); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+        const ls = it.meme.split(' '), mid = Math.ceil(ls.length / 2);
+        text(ctx, ls.slice(0, mid).join(' '), 0, -86, 46, 9.5, '#1C1C1C', 900, K.SIGN_FONT.mont);
+        if (ls.length > 1) text(ctx, ls.slice(mid).join(' '), 0, -72, 46, 9.5, '#1C1C1C', 900, K.SIGN_FONT.mont);
+        ctx.fillStyle = '#E0443A';
+        ctx.fillRect(-20, -110, 40, 5);
+      }
     },
   },
   bench: {
@@ -1368,8 +1538,8 @@ class World {
       item.w = Math.round(r.range(sp.w[0], sp.w[1]));
       item.h = sp.h;
       item.draw = sp.draw;
-      if (id === 'stroyka') item.brands = [this._pickBrand(loc, ['Мегаквартир', 'Самолёт', 'Домтык'])];
-      if (id === 'fence' && r.chance(0.7)) item.ad = r.pick(K.ADS);
+      if (id === 'stroyka') item.ad = this._pickAd(loc, ['developer']);
+      if (id === 'fence' && r.chance(0.7)) item.ad = this._pickAd(loc);
       item.advance = item.w + r.range(6, 30);
     } else {
       const st = STYLES[id];
@@ -1379,8 +1549,8 @@ class World {
       item.floors = Math.min(r.int(st.floors[0], st.floors[1]), maxFloors);
       item.h = st.groundH + item.floors * st.floorH + 50;
       item.draw = drawFacade;
-      if (st.ground === 'shop') { item.brands = [this._nextBrand(loc)]; if (item.w > 285 && r.chance(0.55)) item.brands.push(this._nextBrand(loc)); }
-      else if (st.ground === 'lobby' && r.chance(0.5)) item.brands = [this._nextBrand(loc)];
+      if (st.ground === 'shop') item.units = this._shopUnits(loc, item.w - 10);
+      else if (st.ground === 'lobby' && r.chance(0.6)) item.brands = [this._pickBrand(loc, K.brandsOf('bank', 'cafe', 'telecom'))];
       if (r.chance(0.3)) item.plate = loc.street;
       item.advance = item.w + r.range(-2, 22);
     }
@@ -1390,6 +1560,31 @@ class World {
   _pickBrand(loc, preferred) {
     const local = preferred.filter(b => loc.brands.includes(b));
     return this.rng.pick(local.length ? local : preferred);
+  }
+
+  /* Делит первый этаж между заведениями района: супермаркету нужно больше места, ПВЗ — меньше */
+  _shopUnits(loc, width) {
+    const need = { grocery: 168, alcohol: 132, pvz: 92, cafe: 132, fastfood: 146, bank: 132, pharmacy: 110, retail: 150, telecom: 100, realty: 118, developer: 132 };
+    const units = [];
+    let left = width, guard = 0;
+    while (left >= 86 && units.length < 3 && guard++ < 12) {
+      const name = this._nextBrand(loc), b = K.BRANDS[name];
+      if (!b || !need[b.cat]) continue;                 // такси и каршеринг — не магазины
+      let w = Math.min(left, need[b.cat] * this.rng.range(0.94, 1.1));
+      if (left - w - 5 < 86) w = left;                  // остаток слишком мал — отдаём этому же
+      units.push({ name, w: Math.round(w) });
+      left -= w + 5;
+    }
+    if (!units.length) units.push({ name: loc.brands[0], w: Math.round(width) });
+    return units;
+  }
+
+  /* Реклама для щита: [бренд, строчка]. cats — только такие типы брендов */
+  _pickAd(loc, cats) {
+    let pool = K.brandsOf.apply(null, cats || ['realty', 'developer', 'bank', 'telecom', 'taxi']).filter(n => K.BRANDS[n].ads.length);
+    if (!cats) pool = pool.concat(loc.brands.filter(n => K.BRANDS[n] && K.BRANDS[n].ads.length));
+    const name = this.rng.pick(pool);
+    return [name, this.rng.pick(K.BRANDS[name].ads)];
   }
 
   _makeProp(x) {
@@ -1403,9 +1598,10 @@ class World {
       prop, trunk: mix(prop, '#B49A80', 0.5), leaf: loc.foliage[0], leaf2: loc.foliage[1],
       ink: shade(prop, -0.3), car: r.pick(['#DADDE0', '#D3D6CE', '#D8CFC4', '#CBD3DA', '#C9C9C9']),
     };
-    if (kind === 'kiosk') item.brand = this._pickBrand(loc, ['StarБакс', 'Cofish', 'Додо Крыша', 'Вкусно и запятая', 'Burger Царь', 'Пыжик']);
-    if (kind === 'billboard' || kind === 'busstop') item.text = r.pick(K.ADS);
-    if (kind === 'citylight') item.meme = r.pick(K.MEMES);
+    if (kind === 'kiosk') item.brand = this._pickBrand(loc, K.brandsOf('cafe', 'fastfood'));
+    if (kind === 'billboard' || kind === 'busstop') item.ad = this._pickAd(loc);
+    if (kind === 'citylight') { if (r.chance(0.55)) item.ad = this._pickAd(loc); else item.meme = r.pick(K.MEMES); }
+    if (kind === 'lamp' && r.chance(0.45)) item.note = r.pick(['СДАМ', 'СНИМУ', 'КУПЛЮ', 'СДАМ']);
     item.advance = item.w + r.range(110, 300);
     return item;
   }
@@ -1551,7 +1747,7 @@ class World {
     const [r, g, b] = K.util.hexToRgb(sky);
     const haze = ctx.createLinearGradient(0, gy - 260, 0, gy);
     haze.addColorStop(0, `rgba(${r},${g},${b},0)`);
-    haze.addColorStop(1, `rgba(${r},${g},${b},0.42)`);
+    haze.addColorStop(1, `rgba(${r},${g},${b},0.3)`);
     ctx.fillStyle = haze;
     ctx.fillRect(0, gy - 260, v.w, 260);
 

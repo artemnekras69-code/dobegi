@@ -643,7 +643,7 @@ class LevelGenerator {
     const opts = { variant: this.rng.int(0, 999), text: '', flag: '' };
     if (def.text === 'meme') opts.text = def.id === 'aboard' ? this.rng.pick(K.SHORT_MEMES) : this.rng.chance(0.4) ? 'УЖЕ СДАЛИ' : this.rng.pick(K.MEMES);
     else if (def.text === 'brand') opts.text = this.rng.pick(loc.brands);
-    else if (def.text === 'van') opts.text = this.rng.pick(K.VAN_TEXTS);
+    else if (def.text === 'van') opts.text = this.rng.pick(K.VAN_BRANDS);
     if (def.id === 'car') { const r = this.rng.next(); opts.flag = r < 0.07 ? 'cat' : r < 0.15 ? 'hazard' : ''; }
 
     return { kind: 'obstacle', def, opts, vx: def.vx || 0, lead: choice.info.lead, early: choice.info.early, ix: choice.info.ix, release: choice.info.release };
@@ -810,7 +810,7 @@ class Game {
     const groundY = Math.round(h - band);
     this.view = {
       cw, ch, w, h, scale, dpr, band, groundY,
-      speedFactor: lerp(CONFIG.speed.narrowScreenFactor, 1, clamp((w - V.minWidth) / (V.maxWidth - V.minWidth), 0, 1)),
+      speedFactor: lerp(CONFIG.speed.narrowScreenFactor, 1, clamp((w - V.minWidth) / ((V.maxWidth - V.minWidth) || 1), 0, 1)),
       farScale: clamp(groundY / 330, 0.7, 2.2),     // на высоком экране силуэты крупнее: их видно над домами
       maxBuildingH: clamp(groundY * 0.6, 190, 400),
     };
@@ -1630,7 +1630,8 @@ function boot() {
 
   // шрифты для надписей на холсте; когда загрузятся — перерисовать вывески
   if (document.fonts && document.fonts.load) {
-    Promise.all(['900 16px "Unbounded"', '800 16px "Unbounded"', '700 12px "Manrope"'].map(f => document.fonts.load(f, 'Район ₽').catch(() => {})))
+    const fonts = ['900 16px "Unbounded"', '800 16px "Unbounded"', '700 12px "Manrope"', '800 12px "Manrope"'].concat(K.SIGN_FONTS);
+    Promise.all(fonts.map(f => document.fonts.load(f, 'Район ₽ Rent').catch(() => {})))
       .then(() => game.world.invalidateSprites());
   }
 }

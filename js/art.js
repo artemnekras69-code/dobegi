@@ -550,15 +550,15 @@ const CAR_COLORS = ['#F4F4F4', '#C9584C', '#6E8FB0', '#C9CED3', '#3A3A3A', '#F2C
 O.car = function (ctx, o) {
   const kind = o.variant % CAR_COLORS.length, color = CAR_COLORS[kind];
   carBody(ctx, color, kind === 4 ? '#8FA3B0' : '#CFE0E8');
-  if (kind === 5) {                       // такси «ЯнЕдет»
+  if (kind === 5) {                       // такси «ЯнЕдет»: шашечки и фонарь на крыше
     ctx.fillStyle = C.ink;
-    for (let i = 0; i < 8; i++) if (i % 2) ctx.fillRect(40 + i * 8, -30.5, 8, 4);
-    label(ctx, 'ЯнЕдет', 77, -20, 44, 7.5, C.ink);
-    block(ctx, 68, -52, 18, 6, 2, '#F2CF3B', 1.6);
-  } else if (kind === 0) {                // каршеринг
-    ctx.fillStyle = C.lime;
-    ctx.fillRect(40, -30.5, 70, 3.5);
-    label(ctx, 'каршеринг', 77, -20, 46, 6.5, C.ink, 700, FONT.text);
+    for (let i = 0; i < 12; i++) if (i % 2) ctx.fillRect(10 + i * 10, -30, 10, 3.6);
+    K.sign(ctx, 'ЯнЕдет', 52, -25.5, 48, 12, { radius: 2 });
+    block(ctx, 67, -53, 20, 7, 2.5, '#FFDD2D', 1.6);
+  } else if (kind === 0) {                // каршеринг «ДелиКвартиру»
+    ctx.fillStyle = '#00A86B';
+    ctx.fillRect(8, -13.5, 124, 3.2);
+    K.sign(ctx, 'ДелиКвартиру', 44, -26, 62, 12, { radius: 2 });
   }
   if (o.flag === 'cat') {                 // кот на капоте
     ctx.fillStyle = C.ink;
@@ -592,9 +592,11 @@ O.gazelle = function (ctx, o) {
   rr(ctx, 168, -30, 5, 6, 1.5); ctx.fill();
   // будка
   block(ctx, 4, -76.5, 122, 62, 3, '#F4F4F4');
-  const brand = K.BRANDS[o.text];
-  if (brand) { ctx.fillStyle = brand.bg; ctx.fillRect(6, -62, 118, 28); }
-  label(ctx, o.text || 'ПЕРЕЕЗДЫ', 65, -48, 104, 13, brand ? brand.fg : C.ink);
+  if (K.BRANDS[o.text]) K.sign(ctx, o.text, 10, -68, 110, 34, { radius: 3 });   // борт в фирменном стиле
+  else {
+    label(ctx, o.text || 'ПЕРЕЕЗДЫ', 65, -54, 106, 15, C.danger, 900, K.SIGN_FONT.mont);
+    label(ctx, 'квартирные · 24/7', 65, -38, 92, 7.5, C.ink, 700, FONT.text);
+  }
   ctx.fillStyle = C.danger;
   ctx.fillRect(5.5, -24, 119, 3);
   wheel(ctx, 34, -12, 12);
@@ -672,8 +674,10 @@ O.courier = function (ctx, o) {
   ctx.fillStyle = C.ink;
   ctx.fillRect(20, -28, 5.5, 22);
   ctx.fillRect(27, -28, 5.5, 22);
-  block(ctx, 28, -53, 17, 22, 3, '#F2CF3B', 2);   // термокороб
-  label(ctx, 'ЯнЕдет', 36.5, -42, 14, 4.2, C.ink);
+  const pink = o.variant % 3 === 0;               // термокороб: жёлтый «ЯнЕдет» или розовый «СамоСнял»
+  K.sign(ctx, pink ? 'СамоСнял' : 'ЯнЕдет', 28, -53, 17, 22, { radius: 3 });
+  rr(ctx, 28, -53, 17, 22, 3);
+  outline(ctx, 2);
   ctx.save();
   ctx.translate(27, -28);
   ctx.rotate(-0.2);
@@ -701,14 +705,22 @@ O.pvzman = function (ctx, o) {
 };
 
 /* ── HIGH: всё, под чем нужно пригнуться. Нижний край — на высоте 38 ── */
-O.sign = function (ctx, o) {
-  ropes(ctx, 12, -66, 64, -66);
-  const brand = K.BRANDS[o.text] || { bg: C.white, fg: C.ink };
+/* Вывеска на кронштейне. Столб стоит за дорожкой (он светлый и не мешает),
+   а световой короб висит на цепях прямо над тротуаром. */
+O.bracket = function (ctx, o) {
+  ctx.fillStyle = '#B4B9BF';
+  rr(ctx, 92, -128, 7, 128, 2); ctx.fill();
+  ctx.fillRect(89, -8, 13, 8);
+  line(ctx, [3, -86, 96, -86], 4.4, C.ink2);
+  line(ctx, [96, -64, 72, -86], 3, C.ink2);
   ctx.save();
-  ctx.translate(38, -66);
-  ctx.rotate(Math.sin(o.t * 2.2) * 0.025);
-  block(ctx, -36, 0, 72, 27, 5, brand.bg);
-  label(ctx, o.text || 'СДАЁТСЯ', 0, 13.5, 62, 9.5, brand.fg);
+  ctx.translate(44, -84);
+  ctx.rotate(Math.sin(o.t * 2.2) * 0.018);
+  line(ctx, [-32, 0, -32, 16], 1.8);
+  line(ctx, [32, 0, 32, 16], 1.8);
+  K.sign(ctx, o.text || 'Шестёрочка', -42, 16, 84, 30, { radius: 5 });
+  rr(ctx, -42, 16, 84, 30, 5);
+  outline(ctx);
   ctx.restore();
 };
 
@@ -825,8 +837,19 @@ O.branch = function (ctx, o) {
   ctx.beginPath(); dot(ctx, 30 + sway, -72, 9); dot(ctx, 54 + sway, -90, 8); ctx.fill();
 };
 
+/* Растяжка между двумя столбами (столбы — за дорожкой) */
 O.banner = function (ctx, o) {
-  ropes(ctx, 5, -84, 119, -84, 14);
+  ctx.fillStyle = '#B4B9BF';
+  rr(ctx, -16, -124, 6, 124, 2); ctx.fill();
+  rr(ctx, 134, -124, 6, 124, 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-13, -118); ctx.lineTo(5, -84);
+  ctx.moveTo(-13, -60); ctx.lineTo(5, -40);
+  ctx.moveTo(137, -118); ctx.lineTo(119, -84);
+  ctx.moveTo(137, -60); ctx.lineTo(119, -40);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = C.ink;
+  ctx.stroke();
   ctx.save();
   ctx.translate(62, -84);
   ctx.rotate(Math.sin(o.t * 2) * 0.012);
@@ -838,8 +861,14 @@ O.banner = function (ctx, o) {
   ctx.restore();
 };
 
+/* Огромное объявление на раме: стойки и перекладина — за дорожкой */
 O.listing = function (ctx, o) {
-  ropes(ctx, 14, -158, 94, -158, 4);
+  ctx.fillStyle = '#B4B9BF';
+  rr(ctx, -14, -178, 7, 178, 2); ctx.fill();
+  rr(ctx, 115, -178, 7, 178, 2); ctx.fill();
+  ctx.fillRect(-14, -178, 136, 6);
+  line(ctx, [16, -172, 16, -158], 1.8);
+  line(ctx, [92, -172, 92, -158], 1.8);
   ctx.save();
   ctx.translate(54, -158);
   ctx.rotate(Math.sin(o.t * 1.6) * 0.018);

@@ -7,48 +7,7 @@
 (function (K) {
 'use strict';
 
-/* ───────────────────────── ПАРОДИЙНЫЕ БРЕНДЫ ─────────────────────────
-   Названия — ровно эти. bg/fg — цвета вывески (приглушённые, чтобы не кричали). */
-K.BRANDS = {
-  'Шестёрочка':       { bg: '#C9584C', fg: '#FFFFFF' },
-  'Компас':           { bg: '#B8474B', fg: '#FFFFFF' },
-  'Перекос':          { bg: '#3E7F5A', fg: '#FFFFFF' },
-  'Пыжик':            { bg: '#E8C84A', fg: '#2B5B3A' },
-  'Дикие ягоды':      { bg: '#8E3C8A', fg: '#FFFFFF' },
-  'Белое & Красное':  { bg: '#FFFFFF', fg: '#B3393C' },
-  'ВкусДом':          { bg: '#4E8A4A', fg: '#FFFFFF' },
-  'Fix Rent':         { bg: '#2F66B0', fg: '#D9F04E' },
-  'Вкусно и запятая': { bg: '#3F6B4F', fg: '#F4C95D' },
-  'Burger Царь':      { bg: '#D9722E', fg: '#FFF4D6' },
-  'Додо Крыша':       { bg: '#E0733A', fg: '#FFFFFF' },
-  'StarБакс':         { bg: '#2F6B4F', fg: '#FFFFFF' },
-  'Cofish':           { bg: '#7A3B2E', fg: '#FFE7C2' },
-  'Самолёт':          { bg: '#3E78B8', fg: '#FFFFFF' },
-  'Мегаквартир':      { bg: '#27407A', fg: '#FFFFFF' },
-  'АвиСдано':         { bg: '#FFFFFF', fg: '#2D6CC0' },
-  'Домтык':           { bg: '#5BAA5B', fg: '#FFFFFF' },
-  'ЦИРАН':            { bg: '#2B67C9', fg: '#FFFFFF' },
-  'СДАЙ':             { bg: '#1C1C1C', fg: '#D3F44E' },
-  'ЯнЕдет':           { bg: '#F2CF3B', fg: '#1C1C1C' },
-};
-
-/* Реклама на щитах: [бренд, строчка] */
-K.ADS = [
-  ['АвиСдано', 'Сдано. Ещё вчера'],
-  ['АвиСдано', 'Собственник*'],
-  ['ЦИРАН', '15 минут до метро*'],
-  ['ЦИРАН', 'Фото соответствует'],
-  ['Домтык', 'Ипотека на 50 лет'],
-  ['Домтык', 'Ремонт от застройщика'],
-  ['СДАЙ', 'Сдай уже'],
-  ['СДАЙ', 'Агентам не звонить'],
-  ['Мегаквартир', 'Евротрёшка 24 м²'],
-  ['Мегаквартир', 'Будет бизнес-класс'],
-  ['Самолёт', 'ЖК «Взлётная полоса»'],
-  ['Fix Rent', 'Всё по одной цене*'],
-  ['ЯнЕдет', 'Приедет. Когда-нибудь'],
-  ['Додо Крыша', 'Крыша над головой'],
-];
+/* Пародийные бренды, их вывески и рекламные строчки — в brands.js */
 
 /* ───────────────────────── РАЙОНЫ ─────────────────────────
    tags — по ним подбираются препятствия. front/back/far/props — что стоит в кадре
@@ -62,7 +21,7 @@ K.LOCATIONS = [
     back: { kinds: [['panel', 5], ['panelTall', 3], ['khrush', 2]], colors: ['#D5D9DE', '#CCD1D7'], win: '#B9BFC7', lit: '#FFFFFF' },
     front: { styles: [['panel', 4], ['panelShop', 3.5], ['khrush', 2], ['garages', 1.2]], walls: ['#D9DCD6', '#D6D2C8', '#CFD6DB'], trim: '#C4C8C2', glass: '#BCC9D0', roof: '#B9BDB8' },
     props: [['tree', 5], ['granny', 1.4], ['bench', 1], ['playground', 2.2], ['lamp', 3], ['parkedCar', 3], ['parkedVan', 1], ['kiosk', 0.6]],
-    brands: ['Шестёрочка', 'Пыжик', 'Дикие ягоды', 'Перекос'],
+    brands: ['Шестёрочка', 'Пыжик', 'Дикие ягоды', 'Перекос', 'СДАЙ', 'Обзвон', 'Белое & Красное', '36,6 м²', 'Fix Rent', 'Съём'],
     traffic: [['car', 5], ['van', 2], ['taxi', 1]],
   },
   {
@@ -73,7 +32,7 @@ K.LOCATIONS = [
     back: { kinds: [['factory', 3], ['panel', 3], ['newblock', 2], ['khrush', 2], ['site', 1.5]], colors: ['#D2CFC8', '#C8C5BD'], win: '#B5B1A8', lit: '#FFFFFF' },
     front: { styles: [['panel', 2.5], ['panelShop', 2.5], ['garages', 2.5], ['fence', 2], ['newShop', 1.5], ['khrush', 2]], walls: ['#D3CEC2', '#CDB7A6', '#D8D2CB'], trim: '#BDB7AA', glass: '#B8C2C6', roof: '#ADA79B' },
     props: [['lamp', 4], ['tree', 2.5], ['billboard', 2], ['busstop', 2], ['parkedCar', 2.5], ['parkedVan', 1.5], ['metro', 1]],
-    brands: ['Компас', 'Перекос', 'Шестёрочка', 'Fix Rent', 'Самолёт'],
+    brands: ['Компас', 'Перекос', 'Шестёрочка', 'Fix Rent', 'Рента', 'Белое & Красное', 'Дикие ягоды', 'СДАЙ', 'М².Видео', 'Жилайн', "Rentic's"],
     traffic: [['car', 4], ['van', 3], ['bus', 2], ['taxi', 1]],
   },
   {
@@ -84,7 +43,7 @@ K.LOCATIONS = [
     back: { kinds: [['stalin', 4], ['old', 2], ['panelTall', 1.5]], colors: ['#D9CFBA', '#D0C5AE'], win: '#B5A88F', lit: '#FFF6D6' },
     front: { styles: [['stalin', 4], ['stalinShop', 4], ['old', 1]], walls: ['#DCCFB6', '#D6C5A8', '#E0D4BF'], trim: '#EDE4D0', glass: '#B9C3C4', roof: '#B8AB93' },
     props: [['lamp', 4], ['treeBig', 4], ['busstop', 2], ['metro', 1.5], ['billboard', 1.5], ['bench', 1.5], ['parkedCar', 2]],
-    brands: ['ВкусДом', 'Белое & Красное', 'Cofish', 'Перекос', 'АвиСдано'],
+    brands: ['ВкусДом', 'Белое & Красное', 'Cofish', 'Перекос', 'АвиСдано', 'Съём', '36,6 м²', 'Ипотечница', 'Аренда-Банк', 'Снимай-город'],
     traffic: [['car', 5], ['bus', 2], ['taxi', 2], ['van', 1]],
   },
   {
@@ -96,7 +55,7 @@ K.LOCATIONS = [
     front: { styles: [['pavilion', 3], ['parkFence', 4.5]], walls: ['#EDE9DC', '#E6E0CF'], trim: '#F6F2E6', glass: '#C4CFD2', roof: '#D9C27A' },
     props: [['treeBig', 5], ['lamp', 3], ['bench', 2], ['fountain', 1.6], ['kiosk', 2], ['flower', 2], ['citylight', 1.2]],
     landmarks: ['vdnhArch', 'rocket'],
-    brands: ['Вкусно и запятая', 'StarБакс', 'Додо Крыша'],
+    brands: ['Вкусно и запятая', 'StarБакс', 'Додо Крыша', 'Крошка Однушка', "Rentic's", 'Cofish'],
     traffic: [['car', 3], ['bus', 3], ['taxi', 2]],
   },
   {
@@ -107,7 +66,7 @@ K.LOCATIONS = [
     back: { kinds: [['newblock', 5], ['site', 3], ['glass', 1.5]], colors: ['#D4D9DD', '#C9CFD4'], win: '#B0B8BF', lit: '#FFFFFF' },
     front: { styles: [['newbuild', 3], ['newShop', 3], ['stroyka', 2.5], ['embankment', 1.6]], walls: ['#D9DDE0', '#CDB9A8', '#C9D3D9'], trim: '#BFC6CB', glass: '#B4C3CC', roof: '#A9B1B7' },
     props: [['lamp', 4], ['tree', 2], ['billboard', 2.5], ['citylight', 2], ['parkedCar', 2], ['busstop', 1]],
-    brands: ['Самолёт', 'Мегаквартир', 'Fix Rent', 'Домтык', 'ЦИРАН', 'ВкусДом'],
+    brands: ['Мегаквартир', 'Fix Rent', 'Домтык', 'ЦИРАН', 'ВкусДом', 'Ипотекеа', 'СамоСнял', 'Обзвон', 'Аванс', 'Т-Залог', 'Додо Крыша'],
     traffic: [['car', 4], ['van', 3], ['taxi', 2]],
   },
   {
@@ -118,7 +77,7 @@ K.LOCATIONS = [
     back: { kinds: [['old', 4], ['stalin', 2], ['tower', 1.2]], colors: ['#DDD1BC', '#D4C7B0'], win: '#B6A88F', lit: '#FFF6D6' },
     front: { styles: [['old', 3], ['oldShop', 5], ['theatre', 0.9], ['wall', 0.8]], walls: ['#E6D2B5', '#D9C3C0', '#C9D6C4', '#E3D9A8'], trim: '#F4EFE4', glass: '#BCC6C6', roof: '#A99C8C' },
     props: [['lampOld', 6], ['bench', 2], ['kiosk', 1.5], ['flower', 1.5], ['citylight', 1]],
-    brands: ['Вкусно и запятая', 'StarБакс', 'Burger Царь', 'Cofish', 'Додо Крыша'],
+    brands: ['Вкусно и запятая', 'StarБакс', 'Burger Царь', 'Cofish', 'Додо Крыша', 'Снимай-город', 'Грабёж', "Л'Этаж", 'Ипотечница', 'Крошка Однушка'],
     traffic: [['taxi', 3], ['car', 3], ['courier', 2]],
   },
   {
@@ -130,7 +89,7 @@ K.LOCATIONS = [
     front: { styles: [['old', 3], ['oldShop', 4], ['stalinShop', 1], ['parkFence', 2.4]], walls: ['#E2D5BD', '#D8C7B0', '#E8DFC9', '#D6CDBE'], trim: '#F3EDE0', glass: '#BAC4C4', roof: '#A7998A' },
     props: [['lampOld', 4], ['lamp', 2], ['tree', 2], ['metro', 2], ['bench', 1.5], ['citylight', 1.5]],
     landmarks: ['bridge'],
-    brands: ['Белое & Красное', 'StarБакс', 'Вкусно и запятая', 'Cofish', 'АвиСдано'],
+    brands: ['Белое & Красное', 'StarБакс', 'Вкусно и запятая', 'Cofish', 'АвиСдано', 'Снимай-город', 'Аренда-Банк', "Л'Этаж", 'Грабёж'],
     traffic: [['taxi', 4], ['car', 3], ['bus', 1.5]],
   },
   {
@@ -142,7 +101,7 @@ K.LOCATIONS = [
     front: { styles: [['old', 2.5], ['stalin', 1.5], ['newbuild', 2], ['newShop', 1.5], ['stroyka', 1], ['parkFence', 1.6], ['embankment', 1.4]], walls: ['#DAD3C3', '#C8AE9B', '#E0DACB', '#CFC8B8'], trim: '#EFEADD', glass: '#B7C2C4', roof: '#A59E90' },
     props: [['treeBig', 4], ['lamp', 3], ['parkedCar', 3], ['bench', 1], ['citylight', 1.5], ['billboard', 1]],
     landmarks: ['ges2'],
-    brands: ['ВкусДом', 'Белое & Красное', 'Cofish', 'Мегаквартир', 'СДАЙ'],
+    brands: ['ВкусДом', 'Белое & Красное', 'Cofish', 'Мегаквартир', 'СДАЙ', 'Азбука Съёма', 'Золотой Метр', 'Съём', 'ЦИРАН'],
     traffic: [['car', 5], ['taxi', 2], ['van', 1]],
   },
   {
@@ -153,7 +112,7 @@ K.LOCATIONS = [
     back: { kinds: [['old', 4], ['stalin', 2]], colors: ['#DCD2BE', '#D2C7B2'], win: '#B5A78F', lit: '#FFF6D6' },
     front: { styles: [['old', 2], ['oldShop', 5], ['pond', 2.2], ['stalin', 1]], walls: ['#E3D6BC', '#D8CDB9', '#E6DCC6', '#CDBFAE'], trim: '#F5EFE2', glass: '#BBC6C6', roof: '#A89B8B' },
     props: [['treeBig', 4], ['lampOld', 4], ['bench', 2], ['parkedCar', 3], ['flower', 1.5], ['kiosk', 0.8]],
-    brands: ['StarБакс', 'Cofish', 'ВкусДом', 'Вкусно и запятая', 'Белое & Красное'],
+    brands: ['StarБакс', 'Cofish', 'ВкусДом', 'Вкусно и запятая', 'Белое & Красное', 'Азбука Съёма', 'Золотой Метр', "Л'Этаж", 'Грабёж'],
     traffic: [['car', 5], ['taxi', 3], ['courier', 2]],
   },
   {
@@ -164,7 +123,7 @@ K.LOCATIONS = [
     back: { kinds: [['cityTower', 6], ['glass', 2], ['site', 1]], colors: ['#C9D4DD', '#BCC9D4'], win: '#A4B5C3', lit: '#FFFFFF' },
     front: { styles: [['glass', 5], ['newShop', 1.5], ['stroyka', 1.5], ['embankment', 1.5]], walls: ['#C3D0DB', '#B4C4D1', '#CBD6DE'], trim: '#DDE6EC', glass: '#A9BCCB', roof: '#9FB2C2' },
     props: [['lamp', 4], ['citylight', 3], ['billboard', 2], ['parkedCar', 2.5], ['tree', 1], ['metro', 1.5]],
-    brands: ['StarБакс', 'Burger Царь', 'Мегаквартир', 'ЦИРАН', 'Домтык'],
+    brands: ['StarБакс', 'Burger Царь', 'Мегаквартир', 'ЦИРАН', 'Домтык', 'Т-Залог', 'Аренда-Банк', 'Съём', 'Жилайн', 'М².Видео'],
     traffic: [['car', 4], ['taxi', 4], ['van', 1]],
   },
 ];
@@ -184,7 +143,7 @@ K.LOCATIONS = [
    biome      где встречается: теги районов или 'any'; not — где не встречается
    score      бонус за редкий объект, увиденный впервые
    vx         своя скорость навстречу игроку
-   text       что написано: 'meme' — риелторский мем, 'brand' — вывеска района
+   text       что написано: 'meme' — риелторский мем, 'brand' — вывеска заведения из района, 'van' — борт фургона
    messages   что пишем, если игрок врезался */
 const ANY = ['any'];
 
@@ -262,7 +221,7 @@ K.OBSTACLES = [
     messages: ['Он забрал семь заказов. Вернёт шесть'] },
 
   /* ── HIGH: над головой, нужно пригнуться ── */
-  { id: 'sign', name: 'Вывеска', size: 'HIGH', type: 'duck', w: 76, h: 60, hit: [4, 38, 999], rarity: 'common', minimumDistance: 0, difficulty: 1, biome: ANY, text: 'brand',
+  { id: 'bracket', name: 'Вывеска на кронштейне', size: 'HIGH', type: 'duck', w: 88, h: 110, hit: [3, 38, 90], rarity: 'common', minimumDistance: 0, difficulty: 1, biome: ANY, text: 'brand',
     messages: ['Вывеска висит низко. Аренда — высоко'] },
   { id: 'pigeons', name: 'Голуби', size: 'HIGH', type: 'duck', w: 58, h: 36, hit: [5, 40, 72], vx: 110, rarity: 'common', minimumDistance: 0, difficulty: 1, biome: ANY,
     messages: ['Голуби. Они тут прописаны, а ты нет'] },
@@ -284,7 +243,7 @@ K.OBSTACLES = [
   { id: 'keys', name: 'Связка ключей', size: 'S', type: 'pickup', w: 26, h: 18, hit: [2, 0, 30], rarity: 'uncommon', minimumDistance: 200, difficulty: 1, biome: ANY, messages: [] },
 ];
 
-/* Надписи на фургонах */
-K.VAN_TEXTS = ['ПЕРЕЕЗДЫ', 'ГРУЗЧИКИ 24/7', 'Дикие ягоды', 'ЯнЕдет', 'Fix Rent'];
+/* Чьи фургоны ездят по городу. Не бренд — просто надпись на белом борту */
+K.VAN_BRANDS = ['ПЕРЕЕЗДЫ', 'ГРУЗЧИКИ 24/7', 'Дикие ягоды', 'Обзвон', 'СДАЙ', 'СамоСнял', 'Ипотекеа', 'Fix Rent'];
 
 })(window.KTM = window.KTM || {});
