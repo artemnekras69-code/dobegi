@@ -56,6 +56,28 @@ const FarArt = {
       ctx.rect(0, -44, 70, 44); ctx.rect(84, -62, 40, 62);
     },
   },
+  roofs: {          // рядовая застройка центра: низкие дома, скаты крыш, трубы
+    w: 240,
+    draw(ctx, it) {
+      for (let i = 0, x = 0; i < 6; i++) {
+        const w = 30 + (hash3(it.seed, i, 1) % 22), h = 30 + (hash3(it.seed, i, 2) % 34);
+        ctx.rect(x, -h, w, h);
+        poly(ctx, [x - 2, -h, x + w * 0.5, -h - 9 - (hash3(it.seed, i, 4) % 8), x + w + 2, -h]);
+        if (hash3(it.seed, i, 3) % 3 === 0) ctx.rect(x + w * 0.64, -h - 17, 5, 14);
+        x += w + 2 + (hash3(it.seed, i, 5) % 6);
+      }
+    },
+  },
+  treeline: {       // кромка парка
+    w: 260,
+    draw(ctx, it) {
+      for (let i = 0; i < 9; i++) {
+        const r = 20 + (hash3(it.seed, i, 1) % 16);
+        dot(ctx, 14 + i * 29, -r * 0.9 - (hash3(it.seed, i, 2) % 14), r);
+      }
+      ctx.rect(0, -22, 260, 22);
+    },
+  },
   ostankino: {      // Останкинская башня
     w: 40, scale: 1.25,
     draw(ctx) {
@@ -179,6 +201,17 @@ const FarArt = {
     },
   },
 };
+
+/* Пересчёт весов района: «громкое» встречается реже, обычное занимает освободившееся место.
+   k(id) — какую долю от прежней оставить (1 — не трогать). */
+function rebalance(list, k) {
+  const keep = list.map(([id]) => k(id));
+  let total = 0, plain = 0, loud = 0;
+  list.forEach(([, w], i) => { total += w; if (keep[i] === 1) plain += w; else loud += w * keep[i]; });
+  if (!plain || plain === total) return list;
+  const grow = (total - loud) / plain;
+  return list.map(([id, w], i) => [id, keep[i] === 1 ? w * grow : w * keep[i]]);
+}
 
 /* ───────────────────────────── СРЕДНИЙ ПЛАН: ДОМА ЦЕЛИКОМ ─────────────────────────────
    Рисуются один раз во внеэкранный холст. Начало координат — левый нижний угол. */
@@ -366,6 +399,7 @@ const BackArt = {
     },
   },
   pavilionBack: {   // павильон ВДНХ: колоннада, ярусы, шпиль со звездой
+    place: true,
     dims: r => ({ w: r.range(150, 200), h: r.range(0.36, 0.46), extra: 130, minH: 100 }),
     draw(k, b) {
       k.fillStyle = b.body;
@@ -387,6 +421,7 @@ const BackArt = {
     },
   },
   church: {
+    place: true,
     dims: r => ({ w: r.range(74, 100), h: r.range(0.26, 0.34), extra: 120, minH: 80 }),
     draw(k, b) {
       k.fillStyle = b.body;
@@ -648,12 +683,31 @@ function shopUnit(k, x, w, gH, name, col, seed) {
 function drawGroundFloor(k, f, bays, bw, pad) {
   const st = f.style, col = f.col, W = f.w, gH = st.groundH;
   if (st.ground === 'shop') {
-    // первый этаж поделён между несколькими заведениями
+    // заведения занимают часть первого этажа, остальное — обычные окна и подъезд
     k.fillStyle = col.base;
     k.fillRect(0, -gH, W, gH);
+    if (st.pilasters) { k.fillStyle = col.dark; for (let y = -gH + 14; y < -6; y += 14) k.fillRect(0, y, W, 1.4); }
     k.fillStyle = col.dark;
     k.fillRect(0, -9, W, 9);
-    let x = 5;
+    const x0 = f.shopX, x1 = x0 + f.units.reduce((sum, u) => sum + u.w + 5, -5);
+    const free = [];
+    for (let b = 0; b < bays; b++) { const cx = pad + (b + 0.5) * bw; if (cx + bw * 0.4 < x0 || cx - bw * 0.4 > x1) free.push(cx); }
+    const door = free.length > 1 ? free[x0 > W - x1 ? free.length - 2 : 1] : 0;      // подъезд — через окно от магазина
+    for (const cx of free) {
+      if (cx === door) {
+        k.fillStyle = col.dark;
+        k.fillRect(cx - 13, -58, 26, 58);
+        k.fillRect(cx - 20, -64, 40, 5);
+        k.fillStyle = col.glass;
+        k.fillRect(cx - 9, -54, 18, 22);
+      } else {
+        const ww = bw * 0.5, wh = gH * 0.44, wy = -(gH - 16);
+        if (st.pilasters || st.bands) { k.fillStyle = col.trim; k.fillRect(cx - ww / 2 - 3, wy - 3, ww + 6, wh + 6); }
+        k.fillStyle = col.glass;
+        k.fillRect(cx - ww / 2, wy, ww, wh);
+      }
+    }
+    let x = x0;
     for (const u of f.units) { shopUnit(k, x, u.w, gH, u.name, col, f.seed + Math.round(x)); x += u.w + 5; }
   } else if (st.ground === 'rust') {
     k.fillStyle = col.base;
@@ -873,6 +927,13 @@ const SPECIAL = {
         k.fillStyle = i % 2 ? f.col.leaf : f.col.leaf2;
         k.beginPath(); dot(k, cx, -top + 20, 52); dot(k, cx - 34, -top + 62, 40); dot(k, cx + 36, -top + 58, 42); k.fill();
       }
+      if (f.seed % 3 === 0) {                           // местами вместо решётки — стриженая изгородь
+        k.fillStyle = shade(f.col.leaf2, -0.05);
+        rr(k, 0, -40, f.w, 46, 12); k.fill();
+        k.fillStyle = f.col.leaf;
+        for (let x = 14; x < f.w - 10; x += 34) { k.beginPath(); dot(k, x + (hash3(f.seed, x, 3) % 10), -38, 9); k.fill(); }
+        return;
+      }
       k.fillStyle = '#C9CCC8';
       for (let x = 0; x <= f.w; x += 100) k.fillRect(x - 7, -82, 14, 82);
       k.fillStyle = '#9FA5A2';
@@ -914,7 +975,7 @@ const SPECIAL = {
     },
   },
   embankment: { // набережная: парапет, река, другой берег
-    w: [320, 420], h: 150,
+    w: [320, 420], h: 150, place: true,
     draw(k, f) {
       k.fillStyle = shade(f.col.far, -0.03);
       for (let i = 0, x = 0; x < f.w; i++) { const w = 30 + hash3(f.seed, i, 1) % 40, h = 20 + hash3(f.seed, i, 2) % 36; k.fillRect(x, -112 - h, w, h); x += w + 4; }
@@ -930,7 +991,7 @@ const SPECIAL = {
     },
   },
   pavilion: {   // павильон ВДНХ вблизи
-    w: [300, 340], h: 330,
+    w: [300, 340], h: 330, place: true,
     draw(k, f) {
       const W = f.w;
       k.fillStyle = '#EFEBDD';
@@ -1159,8 +1220,14 @@ const PropArt = {
       ctx.fillRect(-56, -24, 70, 5);
       ctx.fillRect(-50, -20, 4, 20);
       ctx.fillRect(4, -20, 4, 20);
-      // рекламная панель сбоку
-      K.adSign(ctx, it.ad[0], it.ad[1], 24, -78, 38, 66);
+      // панель сбоку: реклама или схема маршрутов
+      if (it.ad) K.adSign(ctx, it.ad[0], it.ad[1], 24, -78, 38, 66);
+      else {
+        rr(ctx, 24, -78, 38, 66, 2); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
+        ctx.fillStyle = it.prop;
+        ctx.fillRect(29, -70, 28, 3);
+        for (let y = -60; y < -20; y += 9) { ctx.fillRect(34, y, 22, 1.6); ctx.beginPath(); dot(ctx, 30.5, y + 0.8, 1.7); ctx.fill(); }
+      }
       // знак остановки
       ctx.fillStyle = it.prop;
       ctx.fillRect(84, -120, 3, 120);
@@ -1169,7 +1236,7 @@ const PropArt = {
     },
   },
   kiosk: {      // ларёк с кофе или едой
-    w: 120,
+    w: 120, loud: true,
     draw(ctx, it) {
       const brand = K.BRANDS[it.brand] || { bg: it.prop, fg: '#FFFFFF' };
       const tone = brand.bg === '#FFFFFF' ? brand.fg : brand.bg;
@@ -1191,7 +1258,7 @@ const PropArt = {
     },
   },
   metro: {      // вестибюль метро в настоящую величину
-    w: 230,
+    w: 230, loud: true,
     draw(ctx, it) {
       ctx.fillStyle = 'rgba(205,220,228,.78)';
       ctx.fillRect(-84, -92, 168, 92);
@@ -1214,7 +1281,7 @@ const PropArt = {
     },
   },
   billboard: {  // рекламный щит
-    w: 230,
+    w: 230, loud: true,
     draw(ctx, it) {
       ctx.fillStyle = it.prop;
       ctx.fillRect(-58, -96, 7, 96);
@@ -1224,7 +1291,7 @@ const PropArt = {
     },
   },
   citylight: {  // сити-формат: реклама или социальный плакат
-    w: 80,
+    w: 80, loud: true,
     draw(ctx, it) {
       ctx.fillStyle = it.prop;
       ctx.fillRect(-4, -34, 8, 34);
@@ -1322,7 +1389,7 @@ const PropArt = {
     },
   },
   fountain: {
-    w: 200,
+    w: 200, loud: true,
     draw(ctx, it) {
       ctx.strokeStyle = 'rgba(255,255,255,.85)';
       ctx.lineWidth = 3;
@@ -1411,11 +1478,14 @@ class World {
     this.skyT = 1;
     this.groundOffset = 0;
     this.time = 0;
-    this.farSets = [this._newSet(loc, 1)];
+    this.skyTurn = {};
+    this.farSets = [this._newSet(loc, 1, true)];
     this.backSets = [this._newSet(loc, 1)];
     this.front = { items: [], cursor: -40 };
     this.props = { items: [], cursor: 60 };
+    this.mix = this._tune(loc);
     this.frontQueue = [];
+    this.markTurn = {};
     this.brandBag = [];
     this.lastStyle = '';
     this.lastProp = '';
@@ -1426,7 +1496,27 @@ class World {
     this.fill();
   }
 
-  _newSet(loc, alpha) { return { loc, items: [], cursor: -80, alpha, target: 1 }; }
+  _newSet(loc, alpha, far) {
+    const set = { loc, mix: this._tune(loc), items: [], cursor: -80, alpha, target: 1, n: 0, mark: '' };
+    // знаковый силуэт виден не в каждый заход в район, и каждый раз — следующий по списку
+    const sky = loc.skyline || [];
+    if (far && sky.length && this.rng.chance(CONFIG.city.skylineChance)) {
+      const turn = this.skyTurn[loc.id] || 0;
+      this.skyTurn[loc.id] = turn + 1;
+      set.mark = sky[turn % sky.length];
+    }
+    return set;
+  }
+
+  /* Веса района с поправкой на CONFIG.city: магазины, знаковые места и реклама — реже, обычная застройка — чаще */
+  _tune(loc) {
+    const c = CONFIG.city;
+    return {
+      front: rebalance(loc.front.styles, id => STYLES[id] ? (STYLES[id].ground === 'shop' ? c.shopHouses : 1) : (SPECIAL[id].place ? c.places : 1)),
+      back: rebalance(loc.back.kinds, id => BackArt[id].place ? c.placesBack : 1),
+      props: rebalance(loc.props, id => PropArt[id].loud ? c.street : 1),
+    };
+  }
 
   /* Смена района: даль и дома растворяются в новые, фасады и улица въезжают справа */
   setLocation(loc) {
@@ -1436,10 +1526,19 @@ class World {
     this.skyT = 0;
     for (const sets of [this.farSets, this.backSets]) {
       for (const s of sets) s.target = 0;
-      sets.unshift(this._newSet(loc, 0));
+      sets.unshift(this._newSet(loc, 0, sets === this.farSets));
       if (sets.length > 3) sets.length = 3;
     }
-    this.frontQueue = (loc.landmarks || []).slice();
+    this.mix = this._tune(loc);
+    // главное место района встречается не в каждый заход, каждый раз следующее по списку,
+    // и стоит не у самой границы, а через пару обычных домов
+    const marks = loc.landmarks || [];
+    this.frontQueue = [];
+    if (marks.length && this.rng.chance(CONFIG.city.landmarkChance)) {
+      const turn = this.markTurn[loc.id] || 0;
+      this.markTurn[loc.id] = turn + 1;
+      this.frontQueue.push({ id: marks[turn % marks.length], wait: this.rng.int(2, 3) });
+    }
     this.brandBag = [];
     this.fill();
   }
@@ -1490,8 +1589,11 @@ class World {
     this._updatePlane(dt);
   }
 
+  /* Вдали — рядовая застройка; знаковый силуэт, если он выпал, стоит вторым — в кадре, но один */
   _makeFar(set, x) {
-    const kind = this.rng.weighted(set.loc.far), art = FarArt[kind];
+    const kind = set.mark && set.n === 1 ? set.mark : this.rng.weighted(set.loc.far);
+    set.n++;
+    const art = FarArt[kind];
     const s = this.game.view.farScale * this.rng.range(0.88, 1.05) * (art.scale || 1);
     const w = art.w * s;
     return { x, kind, w, s, seed: this.rng.int(0, 99999), advance: w + this.rng.range(90, 260) };
@@ -1499,7 +1601,7 @@ class World {
 
   _makeBack(set, x) {
     const L = set.loc.back, r = this.rng;
-    const kind = r.weighted(L.kinds), dims = BackArt[kind].dims(r);
+    const kind = r.weighted(set.mix.back), dims = BackArt[kind].dims(r);
     const maxH = this.game.view.maxBuildingH;
     const body = r.pick(L.colors);
     const h = Math.max(dims.minH || 0, dims.h * maxH);
@@ -1520,10 +1622,17 @@ class World {
 
   _makeFront(x) {
     const loc = this.loc, r = this.rng, F = loc.front;
-    let id = this.frontQueue.shift();
+    let id = '';
+    const next = this.frontQueue[0];
+    if (next && --next.wait <= 0) id = this.frontQueue.shift().id;
     if (!id) {
-      id = r.weighted(F.styles);
-      if (SPECIAL[id] && id === this.lastStyle) id = r.weighted(F.styles);      // два пруда подряд не нужны
+      id = r.weighted(this.mix.front);
+      // магазины и заметные места не стоят подряд: между ними обычные дома
+      const loud = k => !!((STYLES[k] && STYLES[k].ground === 'shop') || (SPECIAL[k] && SPECIAL[k].place));
+      if (loud(id) && loud(this.lastStyle)) {
+        const plain = this.mix.front.filter(([k]) => !loud(k));
+        if (plain.length) id = r.weighted(plain);
+      }
     }
     this.lastStyle = id;
     const wall = r.pick(F.walls);
@@ -1538,8 +1647,8 @@ class World {
       item.w = Math.round(r.range(sp.w[0], sp.w[1]));
       item.h = sp.h;
       item.draw = sp.draw;
-      if (id === 'stroyka') item.ad = this._pickAd(loc, ['developer']);
-      if (id === 'fence' && r.chance(0.7)) item.ad = this._pickAd(loc);
+      if (id === 'stroyka' && r.chance(CONFIG.city.adChance)) item.ad = this._pickAd(loc, ['developer']);
+      if (id === 'fence' && r.chance(CONFIG.city.adChance)) item.ad = this._pickAd(loc);
       item.advance = item.w + r.range(6, 30);
     } else {
       const st = STYLES[id];
@@ -1549,8 +1658,8 @@ class World {
       item.floors = Math.min(r.int(st.floors[0], st.floors[1]), maxFloors);
       item.h = st.groundH + item.floors * st.floorH + 50;
       item.draw = drawFacade;
-      if (st.ground === 'shop') item.units = this._shopUnits(loc, item.w - 10);
-      else if (st.ground === 'lobby' && r.chance(0.6)) item.brands = [this._pickBrand(loc, K.brandsOf('bank', 'cafe', 'telecom'))];
+      if (st.ground === 'shop') this._shopUnits(loc, item);
+      else if (st.ground === 'lobby' && r.chance(CONFIG.city.adChance)) item.brands = [this._pickBrand(loc, K.brandsOf('bank', 'cafe', 'telecom'))];
       if (r.chance(0.3)) item.plate = loc.street;
       item.advance = item.w + r.range(-2, 22);
     }
@@ -1562,21 +1671,25 @@ class World {
     return this.rng.pick(local.length ? local : preferred);
   }
 
-  /* Делит первый этаж между заведениями района: супермаркету нужно больше места, ПВЗ — меньше */
-  _shopUnits(loc, width) {
+  /* Заведения на первом этаже: супермаркету нужно больше места, ПВЗ — меньше.
+     Занимают часть этажа у одного из краёв или посередине, остальное — обычный жилой дом */
+  _shopUnits(loc, item) {
     const need = { grocery: 168, alcohol: 132, pvz: 92, cafe: 132, fastfood: 146, bank: 132, pharmacy: 110, retail: 150, telecom: 100, realty: 118, developer: 132 };
-    const units = [];
+    const r = this.rng, width = item.w - 10, units = [];
+    const count = r.int(CONFIG.city.shopsInHouse[0], CONFIG.city.shopsInHouse[1]);
     let left = width, guard = 0;
-    while (left >= 86 && units.length < 3 && guard++ < 12) {
+    while (left >= 86 && units.length < count && guard++ < 12) {
       const name = this._nextBrand(loc), b = K.BRANDS[name];
       if (!b || !need[b.cat]) continue;                 // такси и каршеринг — не магазины
-      let w = Math.min(left, need[b.cat] * this.rng.range(0.94, 1.1));
-      if (left - w - 5 < 86) w = left;                  // остаток слишком мал — отдаём этому же
+      const w = Math.min(left, need[b.cat] * r.range(0.94, 1.1));
       units.push({ name, w: Math.round(w) });
       left -= w + 5;
     }
-    if (!units.length) units.push({ name: loc.brands[0], w: Math.round(width) });
-    return units;
+    if (!units.length) { units.push({ name: loc.brands[0], w: Math.round(Math.min(width, 150)) }); left = width - units[0].w - 5; }
+    left = Math.max(0, left + 5);
+    if (left < 64) { units[units.length - 1].w += Math.round(left); left = 0; }     // на обычное окно места не осталось
+    item.units = units;
+    item.shopX = 5 + Math.round(r.pick([0, left, left / 2]));
   }
 
   /* Реклама для щита: [бренд, строчка]. cats — только такие типы брендов */
@@ -1589,8 +1702,8 @@ class World {
 
   _makeProp(x) {
     const loc = this.loc, r = this.rng;
-    let kind = r.weighted(loc.props);
-    if (kind === this.lastProp && PropArt[kind].w > 100) kind = r.weighted(loc.props);
+    let kind = r.weighted(this.mix.props);
+    if (kind === this.lastProp && PropArt[kind].w > 100) kind = r.weighted(this.mix.props);
     this.lastProp = kind;
     const s = r.range(0.94, 1.1), prop = shade(loc.farColor, -0.2);
     const item = {
@@ -1599,9 +1712,9 @@ class World {
       ink: shade(prop, -0.3), car: r.pick(['#DADDE0', '#D3D6CE', '#D8CFC4', '#CBD3DA', '#C9C9C9']),
     };
     if (kind === 'kiosk') item.brand = this._pickBrand(loc, K.brandsOf('cafe', 'fastfood'));
-    if (kind === 'billboard' || kind === 'busstop') item.ad = this._pickAd(loc);
+    if (kind === 'billboard' || (kind === 'busstop' && r.chance(CONFIG.city.adChance))) item.ad = this._pickAd(loc);
     if (kind === 'citylight') { if (r.chance(0.55)) item.ad = this._pickAd(loc); else item.meme = r.pick(K.MEMES); }
-    if (kind === 'lamp' && r.chance(0.45)) item.note = r.pick(['СДАМ', 'СНИМУ', 'КУПЛЮ', 'СДАМ']);
+    if (kind === 'lamp' && r.chance(CONFIG.city.notes)) item.note = r.pick(['СДАМ', 'СНИМУ', 'КУПЛЮ', 'СДАМ']);
     item.advance = item.w + r.range(110, 300);
     return item;
   }

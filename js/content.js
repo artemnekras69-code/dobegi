@@ -11,13 +11,16 @@
 
 /* ───────────────────────── РАЙОНЫ ─────────────────────────
    tags — по ним подбираются препятствия. front/back/far/props — что стоит в кадре
-   и с каким весом ([вид, вес]). Виды описаны в city.js. */
+   и с каким весом ([вид, вес]). Виды описаны в city.js.
+   far — рядовой силуэт вдали; skyline — знаковые силуэты района; landmarks — знаковые места в ближнем ряду.
+   И те и другие встречаются не в каждый заход в район, по одному и по очереди.
+   Как часто попадаются магазины, реклама и знаковые места — CONFIG.city в config.js. */
 K.LOCATIONS = [
   {
     id: 'yard', name: 'ОБЫЧНЫЙ ДВОР', short: 'Двор', note: 'шлагбаум, лавочка, ПВЗ', street: 'Тупиковый пр.',
     tags: ['yard', 'residential'],
     sky: ['#F4F6F7', '#E6EBEE'], farColor: '#DADFE4', foliage: ['#BFCDB0', '#B2C1A2'],
-    far: [['blocks', 5], ['chimneys', 2], ['ostankino', 0.5]],
+    far: [['blocks', 5], ['chimneys', 2], ['ostankino', 0.3]],
     back: { kinds: [['panel', 5], ['panelTall', 3], ['khrush', 2]], colors: ['#D5D9DE', '#CCD1D7'], win: '#B9BFC7', lit: '#FFFFFF' },
     front: { styles: [['panel', 4], ['panelShop', 3.5], ['khrush', 2], ['garages', 1.2]], walls: ['#D9DCD6', '#D6D2C8', '#CFD6DB'], trim: '#C4C8C2', glass: '#BCC9D0', roof: '#B9BDB8' },
     props: [['tree', 5], ['granny', 1.4], ['bench', 1], ['playground', 2.2], ['lamp', 3], ['parkedCar', 3], ['parkedVan', 1], ['kiosk', 0.6]],
@@ -39,7 +42,7 @@ K.LOCATIONS = [
     id: 'sokol', name: 'СОКОЛ', short: 'Сокол', note: 'сталинки, широкий проспект и самолёты', street: 'Ленинградский пр-т',
     tags: ['residential', 'stalin'],
     sky: ['#F6F4EE', '#EAE5D9'], farColor: '#DDD6C6', foliage: ['#BDCAA6', '#AFBD97'], skyFx: 'plane',
-    far: [['vysotka', 2], ['rechnoy', 2.5], ['blocks', 2]],
+    far: [['blocks', 3], ['roofs', 2]], skyline: ['rechnoy', 'vysotka'],
     back: { kinds: [['stalin', 4], ['old', 2], ['panelTall', 1.5]], colors: ['#D9CFBA', '#D0C5AE'], win: '#B5A88F', lit: '#FFF6D6' },
     front: { styles: [['stalin', 4], ['stalinShop', 4], ['old', 1]], walls: ['#DCCFB6', '#D6C5A8', '#E0D4BF'], trim: '#EDE4D0', glass: '#B9C3C4', roof: '#B8AB93' },
     props: [['lamp', 4], ['treeBig', 4], ['busstop', 2], ['metro', 1.5], ['billboard', 1.5], ['bench', 1.5], ['parkedCar', 2]],
@@ -50,8 +53,8 @@ K.LOCATIONS = [
     id: 'vdnh', name: 'ВДНХ', short: 'ВДНХ', note: 'павильоны, фонтаны и башня', street: 'пр-т Мира',
     tags: ['park', 'tourist', 'pedestrian'],
     sky: ['#F3F7F9', '#E3EDF2'], farColor: '#D5DFE6', foliage: ['#B9CFA6', '#A9C195'],
-    far: [['ostankino', 6], ['ferris', 2.5], ['blocks', 1]],
-    back: { kinds: [['pavilionBack', 5], ['stalin', 1], ['old', 1]], colors: ['#E6E1D2', '#DDD7C6'], win: '#C2B99F', lit: '#FFF6D6' },
+    far: [['treeline', 4], ['blocks', 2]], skyline: ['ostankino', 'ferris'],
+    back: { kinds: [['pavilionBack', 5], ['old', 1.5], ['panelTall', 0.5]], colors: ['#E6E1D2', '#DDD7C6'], win: '#C2B99F', lit: '#FFF6D6' },
     front: { styles: [['pavilion', 3], ['parkFence', 4.5]], walls: ['#EDE9DC', '#E6E0CF'], trim: '#F6F2E6', glass: '#C4CFD2', roof: '#D9C27A' },
     props: [['treeBig', 5], ['lamp', 3], ['bench', 2], ['fountain', 1.6], ['kiosk', 2], ['flower', 2], ['citylight', 1.2]],
     landmarks: ['vdnhArch', 'rocket'],
@@ -62,9 +65,9 @@ K.LOCATIONS = [
     id: 'zil', name: 'ЗИЛ', short: 'ЗИЛ', note: 'был завод, стал «квартал у набережной»', street: 'б-р Братьев Весниных',
     tags: ['construction', 'newbuild', 'embankment'],
     sky: ['#F2F5F7', '#E2E8EC'], farColor: '#D5DCE2', foliage: ['#BDCBB0', '#AEBDA0'],
-    far: [['cranes', 4], ['shater', 1.6], ['blocks', 2], ['city', 0.8]],
+    far: [['cranes', 4], ['blocks', 3]], skyline: ['shater'],
     back: { kinds: [['newblock', 5], ['site', 3], ['glass', 1.5]], colors: ['#D4D9DD', '#C9CFD4'], win: '#B0B8BF', lit: '#FFFFFF' },
-    front: { styles: [['newbuild', 3], ['newShop', 3], ['stroyka', 2.5], ['embankment', 1.6]], walls: ['#D9DDE0', '#CDB9A8', '#C9D3D9'], trim: '#BFC6CB', glass: '#B4C3CC', roof: '#A9B1B7' },
+    front: { styles: [['newbuild', 4], ['newShop', 3], ['stroyka', 2], ['embankment', 1.6]], walls: ['#D9DDE0', '#CDB9A8', '#C9D3D9'], trim: '#BFC6CB', glass: '#B4C3CC', roof: '#A9B1B7' },
     props: [['lamp', 4], ['tree', 2], ['billboard', 2.5], ['citylight', 2], ['parkedCar', 2], ['busstop', 1]],
     brands: ['Мегаквартир', 'Fix Rent', 'Домтык', 'ЦИРАН', 'ВкусДом', 'Ипотекеа', 'СамоСнял', 'Обзвон', 'Аванс', 'Т-Залог', 'Додо Крыша'],
     traffic: [['car', 4], ['van', 3], ['taxi', 2]],
@@ -73,10 +76,11 @@ K.LOCATIONS = [
     id: 'arbat', name: 'АРБАТ', short: 'Арбат', note: 'туристы, музыканты, матрёшки', street: 'ул. Арбат',
     tags: ['tourist', 'center', 'pedestrian'],
     sky: ['#F8F4EC', '#EFE6D6'], farColor: '#E0D6C4', foliage: ['#C2CCA6', '#B4BF97'],
-    far: [['vysotka', 3.5], ['blocks', 1]],
+    far: [['roofs', 4], ['blocks', 1]], skyline: ['vysotka'],
     back: { kinds: [['old', 4], ['stalin', 2], ['tower', 1.2]], colors: ['#DDD1BC', '#D4C7B0'], win: '#B6A88F', lit: '#FFF6D6' },
-    front: { styles: [['old', 3], ['oldShop', 5], ['theatre', 0.9], ['wall', 0.8]], walls: ['#E6D2B5', '#D9C3C0', '#C9D6C4', '#E3D9A8'], trim: '#F4EFE4', glass: '#BCC6C6', roof: '#A99C8C' },
+    front: { styles: [['old', 3], ['stalin', 0.8], ['oldShop', 5]], walls: ['#E6D2B5', '#D9C3C0', '#C9D6C4', '#E3D9A8'], trim: '#F4EFE4', glass: '#BCC6C6', roof: '#A99C8C' },
     props: [['lampOld', 6], ['bench', 2], ['kiosk', 1.5], ['flower', 1.5], ['citylight', 1]],
+    landmarks: ['wall', 'theatre'],
     brands: ['Вкусно и запятая', 'StarБакс', 'Burger Царь', 'Cofish', 'Додо Крыша', 'Снимай-город', 'Грабёж', "Л'Этаж", 'Ипотечница', 'Крошка Однушка'],
     traffic: [['taxi', 3], ['car', 3], ['courier', 2]],
   },
@@ -84,9 +88,9 @@ K.LOCATIONS = [
     id: 'kitay', name: 'КИТАЙ-ГОРОД', short: 'Китай-город', note: 'до Кремля рукой подать', street: 'ул. Варварка',
     tags: ['tourist', 'center'],
     sky: ['#F7F3EC', '#ECE3D4'], farColor: '#DCC3B4', foliage: ['#BFCBA6', '#B0BD96'],
-    far: [['kremlin', 5], ['basil', 3], ['vysotka', 1]],
+    far: [['roofs', 4], ['blocks', 0.6]], skyline: ['kremlin', 'basil'],
     back: { kinds: [['old', 4], ['church', 2], ['stalin', 1.5]], colors: ['#DDD2BE', '#D3C7B1'], win: '#B5A78E', lit: '#FFF6D6' },
-    front: { styles: [['old', 3], ['oldShop', 4], ['stalinShop', 1], ['parkFence', 2.4]], walls: ['#E2D5BD', '#D8C7B0', '#E8DFC9', '#D6CDBE'], trim: '#F3EDE0', glass: '#BAC4C4', roof: '#A7998A' },
+    front: { styles: [['old', 4], ['oldShop', 4], ['stalin', 1.5], ['stalinShop', 1], ['parkFence', 1.6]], walls: ['#E2D5BD', '#D8C7B0', '#E8DFC9', '#D6CDBE'], trim: '#F3EDE0', glass: '#BAC4C4', roof: '#A7998A' },
     props: [['lampOld', 4], ['lamp', 2], ['tree', 2], ['metro', 2], ['bench', 1.5], ['citylight', 1.5]],
     landmarks: ['bridge'],
     brands: ['Белое & Красное', 'StarБакс', 'Вкусно и запятая', 'Cofish', 'АвиСдано', 'Снимай-город', 'Аренда-Банк', "Л'Этаж", 'Грабёж'],
@@ -96,7 +100,7 @@ K.LOCATIONS = [
     id: 'khamovniki', name: 'ХАМОВНИКИ', short: 'Хамовники', note: 'тихие дворы по цене громких', street: 'ул. Остоженка',
     tags: ['premium', 'center', 'construction'],
     sky: ['#F5F5F0', '#E8E8DC'], farColor: '#DAD9CC', foliage: ['#B9C9A4', '#AABB94'],
-    far: [['hhs', 5], ['luzhniki', 2], ['vysotka', 2]],
+    far: [['roofs', 3], ['blocks', 1.5]], skyline: ['hhs', 'luzhniki'],
     back: { kinds: [['old', 3], ['newblock', 2], ['stalin', 2]], colors: ['#D8D3C5', '#CEC8B9'], win: '#B3AC9A', lit: '#FFF6D6' },
     front: { styles: [['old', 2.5], ['stalin', 1.5], ['newbuild', 2], ['newShop', 1.5], ['stroyka', 1], ['parkFence', 1.6], ['embankment', 1.4]], walls: ['#DAD3C3', '#C8AE9B', '#E0DACB', '#CFC8B8'], trim: '#EFEADD', glass: '#B7C2C4', roof: '#A59E90' },
     props: [['treeBig', 4], ['lamp', 3], ['parkedCar', 3], ['bench', 1], ['citylight', 1.5], ['billboard', 1]],
@@ -108,10 +112,11 @@ K.LOCATIONS = [
     id: 'patriki', name: 'ПАТРИКИ', short: 'Патрики', note: 'кофе по цене аренды', street: 'ул. Малая Бронная',
     tags: ['premium', 'center', 'park'],
     sky: ['#F8F5EE', '#EEE7D8'], farColor: '#DFD7C6', foliage: ['#B7CBA3', '#A8BD93'],
-    far: [['vysotka', 2.5], ['blocks', 1]],
+    far: [['roofs', 4], ['blocks', 1]], skyline: ['vysotka'],
     back: { kinds: [['old', 4], ['stalin', 2]], colors: ['#DCD2BE', '#D2C7B2'], win: '#B5A78F', lit: '#FFF6D6' },
-    front: { styles: [['old', 2], ['oldShop', 5], ['pond', 2.2], ['stalin', 1]], walls: ['#E3D6BC', '#D8CDB9', '#E6DCC6', '#CDBFAE'], trim: '#F5EFE2', glass: '#BBC6C6', roof: '#A89B8B' },
+    front: { styles: [['old', 2], ['oldShop', 5], ['stalin', 1]], walls: ['#E3D6BC', '#D8CDB9', '#E6DCC6', '#CDBFAE'], trim: '#F5EFE2', glass: '#BBC6C6', roof: '#A89B8B' },
     props: [['treeBig', 4], ['lampOld', 4], ['bench', 2], ['parkedCar', 3], ['flower', 1.5], ['kiosk', 0.8]],
+    landmarks: ['pond'],
     brands: ['StarБакс', 'Cofish', 'ВкусДом', 'Вкусно и запятая', 'Белое & Красное', 'Азбука Съёма', 'Золотой Метр', "Л'Этаж", 'Грабёж'],
     traffic: [['car', 5], ['taxi', 3], ['courier', 2]],
   },
@@ -119,7 +124,7 @@ K.LOCATIONS = [
     id: 'city', name: 'МОСКВА-СИТИ', short: 'Сити', note: 'стекло, бетон и переговорки', street: 'Пресненская наб.',
     tags: ['business', 'construction', 'premium', 'embankment'],
     sky: ['#EEF3F7', '#DCE6EE'], farColor: '#CFDAE4', foliage: ['#B9C9B4', '#AABBA5'],
-    far: [['city', 6], ['cranes', 2]],
+    far: [['blocks', 3], ['cranes', 2]], skyline: ['city'],
     back: { kinds: [['cityTower', 6], ['glass', 2], ['site', 1]], colors: ['#C9D4DD', '#BCC9D4'], win: '#A4B5C3', lit: '#FFFFFF' },
     front: { styles: [['glass', 5], ['newShop', 1.5], ['stroyka', 1.5], ['embankment', 1.5]], walls: ['#C3D0DB', '#B4C4D1', '#CBD6DE'], trim: '#DDE6EC', glass: '#A9BCCB', roof: '#9FB2C2' },
     props: [['lamp', 4], ['citylight', 3], ['billboard', 2], ['parkedCar', 2.5], ['tree', 1], ['metro', 1.5]],
@@ -221,17 +226,17 @@ K.OBSTACLES = [
     messages: ['Он забрал семь заказов. Вернёт шесть'] },
 
   /* ── HIGH: над головой, нужно пригнуться ── */
-  { id: 'bracket', name: 'Вывеска на кронштейне', size: 'HIGH', type: 'duck', w: 88, h: 110, hit: [3, 38, 90], rarity: 'common', minimumDistance: 0, difficulty: 1, biome: ANY, text: 'brand',
+  { id: 'bracket', name: 'Вывеска на кронштейне', size: 'HIGH', type: 'duck', w: 88, h: 110, hit: [3, 38, 90], rarity: 'rare', minimumDistance: 0, difficulty: 1, biome: ANY, text: 'brand',
     messages: ['Вывеска висит низко. Аренда — высоко'] },
   { id: 'pigeons', name: 'Голуби', size: 'HIGH', type: 'duck', w: 58, h: 36, hit: [5, 40, 72], vx: 110, rarity: 'common', minimumDistance: 0, difficulty: 1, biome: ANY,
     messages: ['Голуби. Они тут прописаны, а ты нет'] },
-  { id: 'gate', name: 'Шлагбаум', size: 'HIGH', type: 'duck', w: 126, h: 14, hit: [2, 38, 50], rarity: 'common', minimumDistance: 300, difficulty: 2, biome: ['yard', 'residential', 'premium', 'business', 'newbuild'],
+  { id: 'gate', name: 'Шлагбаум', size: 'HIGH', type: 'duck', w: 126, h: 14, hit: [2, 38, 50], rarity: 'common', minimumDistance: 0, difficulty: 1, biome: ['yard', 'residential', 'premium', 'business', 'newbuild', 'center'], not: ['pedestrian'],
     messages: ['Шлагбаум. Пульт только у жильцов'] },
   { id: 'beam', name: 'Балка на тросах', size: 'HIGH', type: 'duck', w: 100, h: 24, hit: [4, 38, 999], rarity: 'common', minimumDistance: 300, difficulty: 2, biome: ['construction', 'newbuild', 'business', 'industrial'],
     messages: ['Ремонт от застройщика. Прямо сейчас'] },
   { id: 'laundry', name: 'Бельевая верёвка', size: 'HIGH', type: 'duck', w: 116, h: 46, hit: [6, 38, 84], rarity: 'uncommon', minimumDistance: 300, difficulty: 2, biome: ['yard', 'residential'],
     messages: ['Чужие простыни. Сушатся с 1998 года'] },
-  { id: 'branch', name: 'Низкая ветка', size: 'HIGH', type: 'duck', w: 92, h: 100, hit: [6, 38, 140], rarity: 'common', minimumDistance: 300, difficulty: 2, biome: ['park', 'premium', 'residential', 'yard', 'stalin'],
+  { id: 'branch', name: 'Низкая ветка', size: 'HIGH', type: 'duck', w: 92, h: 100, hit: [6, 38, 140], rarity: 'common', minimumDistance: 300, difficulty: 2, biome: ['park', 'premium', 'residential', 'yard', 'stalin', 'center'],
     messages: ['Ветку обещали спилить. Управляющая компания думает'] },
   { id: 'banner', name: 'Растяжка', size: 'HIGH', type: 'duck', w: 124, h: 46, hit: [6, 38, 999], rarity: 'uncommon', minimumDistance: 700, difficulty: 3, biome: ANY, text: 'meme',
     messages: ['«Уже сдали». Написано же'] },
@@ -244,6 +249,7 @@ K.OBSTACLES = [
 ];
 
 /* Чьи фургоны ездят по городу. Не бренд — просто надпись на белом борту */
-K.VAN_BRANDS = ['ПЕРЕЕЗДЫ', 'ГРУЗЧИКИ 24/7', 'Дикие ягоды', 'Обзвон', 'СДАЙ', 'СамоСнял', 'Ипотекеа', 'Fix Rent'];
+K.VAN_PLAIN = ['ПЕРЕЕЗДЫ', 'ГРУЗЧИКИ', 'ПЕРЕЕЗДЫ'];
+K.VAN_BRANDS = ['Дикие ягоды', 'Обзвон', 'СДАЙ', 'СамоСнял', 'Ипотекеа', 'Fix Rent'];        // фирменный борт — изредка (CONFIG.city.brandVans)
 
 })(window.KTM = window.KTM || {});

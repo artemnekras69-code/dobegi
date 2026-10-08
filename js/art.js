@@ -546,16 +546,18 @@ O.janitor = function (ctx, o) {
   rr(ctx, 16.5, -64, 15, 5, 2.5); ctx.fillStyle = '#F08A3C'; ctx.fill();
 };
 
-const CAR_COLORS = ['#F4F4F4', '#C9584C', '#6E8FB0', '#C9CED3', '#3A3A3A', '#F2CF3B'];
+const CAR_COLORS = ['#F4F4F4', '#C9584C', '#6E8FB0', '#C9CED3', '#3A3A3A'];
 O.car = function (ctx, o) {
-  const kind = o.variant % CAR_COLORS.length, color = CAR_COLORS[kind];
-  carBody(ctx, color, kind === 4 ? '#8FA3B0' : '#CFE0E8');
-  if (kind === 5) {                       // такси «ЯнЕдет»: шашечки и фонарь на крыше
+  // обычные машины — почти все; такси и каршеринг — по одной из шестнадцати
+  const roll = o.variant % 16, taxi = roll === 15, sharing = roll === 14;
+  const color = taxi ? '#F2CF3B' : sharing ? '#F4F4F4' : CAR_COLORS[roll % CAR_COLORS.length];
+  carBody(ctx, color, color === '#3A3A3A' ? '#8FA3B0' : '#CFE0E8');
+  if (taxi) {                             // такси «ЯнЕдет»: шашечки и фонарь на крыше
     ctx.fillStyle = C.ink;
     for (let i = 0; i < 12; i++) if (i % 2) ctx.fillRect(10 + i * 10, -30, 10, 3.6);
     K.sign(ctx, 'ЯнЕдет', 52, -25.5, 48, 12, { radius: 2 });
     block(ctx, 67, -53, 20, 7, 2.5, '#FFDD2D', 1.6);
-  } else if (kind === 0) {                // каршеринг «ДелиКвартиру»
+  } else if (sharing) {                   // каршеринг «ДелиКвартиру»
     ctx.fillStyle = '#00A86B';
     ctx.fillRect(8, -13.5, 124, 3.2);
     K.sign(ctx, 'ДелиКвартиру', 44, -26, 62, 12, { radius: 2 });

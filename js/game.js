@@ -643,7 +643,7 @@ class LevelGenerator {
     const opts = { variant: this.rng.int(0, 999), text: '', flag: '' };
     if (def.text === 'meme') opts.text = def.id === 'aboard' ? this.rng.pick(K.SHORT_MEMES) : this.rng.chance(0.4) ? 'УЖЕ СДАЛИ' : this.rng.pick(K.MEMES);
     else if (def.text === 'brand') opts.text = this.rng.pick(loc.brands);
-    else if (def.text === 'van') opts.text = this.rng.pick(K.VAN_BRANDS);
+    else if (def.text === 'van') opts.text = this.rng.pick(this.rng.chance(CONFIG.city.brandVans) ? K.VAN_BRANDS : K.VAN_PLAIN);
     if (def.id === 'car') { const r = this.rng.next(); opts.flag = r < 0.07 ? 'cat' : r < 0.15 ? 'hazard' : ''; }
 
     return { kind: 'obstacle', def, opts, vx: def.vx || 0, lead: choice.info.lead, early: choice.info.early, ix: choice.info.ix, release: choice.info.release };
