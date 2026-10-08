@@ -140,8 +140,8 @@ const CONFIG = {
 
   audio: { volume: 0.9, musicVolume: 0.45, bpm: 118 },
 
-  /* Ссылка на игру для кнопки «Поделиться». Пусто — возьмётся адрес страницы. */
-  share: { url: '' },
+  /* Ссылка на игру для кнопки «Поделиться»: Mini App в Telegram. Пусто — возьмётся адрес страницы. */
+  share: { url: 'https://t.me/KeysToGameBot/run' },
 
   storageKey: 'ktm.runner.v1',
 };
