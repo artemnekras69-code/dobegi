@@ -1588,7 +1588,6 @@ class Game {
     if (p.dead && p.onGround) Art.dizzy(ctx, p.x + p.knock - 28, gy - 30, this.stateTime);
     if (this.impact) Art.impact(ctx, this.impact.x, this.impact.y, this.impact.t / 0.2);
     this.particles.draw(ctx);
-    this.world.drawFore(ctx);
 
     if (K.DEBUG) this._drawDebug(ctx);
     ctx.restore();

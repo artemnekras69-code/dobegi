@@ -9,17 +9,16 @@
      дальний план  силуэты одним цветом                       параллакс 0.06
      средний       дома целиком                               0.22
      фасады        первые этажи, магазины, объявления          0.5
-     улица         деревья, фонари, остановки                 0.72
+     улица         деревья, фонари, столбы с проводами        0.72
      дорожка       герой, препятствия, карточки — рисует game.js
-     передний      провода и гирлянды над игровой зоной       1.35
-     дорога        машины в нижней полосе, разметка, люки
+     дорога        ближе всех: машины в нижней полосе, разметка, люки
    ===================================================================== */
 (function (K) {
 'use strict';
 
 const { TAU, clamp, lerp, fmt, makeRng, hash3, mix, shade, poly } = K.util;
 const CONFIG = K.CONFIG, FONT = K.FONT, C = CONFIG.colors, ink = K.ink;
-const { FarArt, BackArt, STYLES, SPECIAL, PropArt, ForeArt, drawFacade, drawTraffic, fr, fp } = K.CityArt;
+const { FarArt, BackArt, STYLES, SPECIAL, PropArt, drawFacade, drawTraffic, fr, fp } = K.CityArt;
 const T = ink.text;
 const LIT = '#F3DF9A';
 
@@ -34,12 +33,12 @@ function rebalance(list, k) {
   return list.map(([id, w], i) => [id, keep[i] === 1 ? w * grow : w * keep[i]]);
 }
 
-const PARALLAX = { far: 0.06, back: 0.22, front: 0.5, props: 0.72, fore: 1.35 };
+const PARALLAX = { far: 0.06, back: 0.22, front: 0.5, props: 0.72 };
 
 class World {
   constructor(game) {
     this.game = game;
-    this.strips = {};           // растровые полосы неба и дымки: по одной на район и размер экрана
+    this.strips = {};           // растровая полоса неба: по одной на район и размер экрана
     this.reset(K.LOCATIONS[0]);
   }
 
@@ -55,7 +54,6 @@ class World {
     this.backSets = [this._newSet(loc, 1)];
     this.front = { items: [], cursor: -40 };
     this.props = { items: [], cursor: 60 };
-    this.fore = { items: [], cursor: 500 };
     this.decals = { items: [], cursor: 300 };
     this.mix = this._tune(loc);
     this.frontQueue = [];
@@ -130,7 +128,6 @@ class World {
     for (const s of this.backSets) if (s.target === 1) while (s.cursor < edge) { const it = this._makeBack(s, s.cursor); s.items.push(it); s.cursor += it.advance; }
     while (this.front.cursor < edge) { const it = this._makeFront(this.front.cursor); this.front.items.push(it); this.front.cursor += it.advance; }
     while (this.props.cursor < edge) { const it = this._makeProp(this.props.cursor); this.props.items.push(it); this.props.cursor += it.advance; }
-    while (this.fore.cursor < edge) { const it = this._makeFore(this.fore.cursor); this.fore.items.push(it); this.fore.cursor += it.advance; }
     while (this.decals.cursor < edge) { const it = this._makeDecal(this.decals.cursor); this.decals.items.push(it); this.decals.cursor += it.advance; }
   }
 
@@ -150,7 +147,7 @@ class World {
         if (!s.target && s.alpha <= 0) sets.splice(i, 1);
       }
     }
-    for (const [layer, par, margin] of [[this.front, PARALLAX.front, 80], [this.props, PARALLAX.props, 180], [this.fore, PARALLAX.fore, 80], [this.decals, 1, 60]]) {
+    for (const [layer, par, margin] of [[this.front, PARALLAX.front, 80], [this.props, PARALLAX.props, 180], [this.decals, 1, 60]]) {
       layer.cursor -= dx * par;
       scroll(layer.items, dx * par, margin);
     }
@@ -302,7 +299,7 @@ class World {
     const lux = loc.tags.includes('premium') || loc.tags.includes('business');
     const item = {
       x, kind, s, w: art.w * s, h: (art.h + 8) * s, seed: r.int(0, 99999), sprite: null, ps: 0,
-      prop, trunk: mix(C.ink2, loc.sky, 0.5), leaf: loc.foliage[0], leaf2: loc.foliage[1],
+      prop, sky: loc.sky, trunk: mix(C.ink2, loc.sky, 0.5), leaf: loc.foliage[0], leaf2: loc.foliage[1],
       ink: mix(C.ink2, loc.sky, 0.38), car: lux && r.chance(0.6) ? mix(C.ink2, loc.sky, 0.4) : mix(r.pick(cars), loc.sky, 0.42), lux,
       draw(k, it) { k.translate(it.w / 2, 0); k.scale(it.s, it.s); art.draw(k, it); },
     };
@@ -311,17 +308,6 @@ class World {
     if (kind === 'citylight') { if (r.chance(0.5)) item.ad = this._pickAd(loc); else item.meme = r.pick(K.MEMES); }
     if (kind === 'lamp' && r.chance(CONFIG.city.notes)) item.note = r.pick(['СДАМ', 'СНИМУ', 'КУПЛЮ', 'СДАМ']);
     item.advance = item.w + r.range(110, 300);
-    return item;
-  }
-
-  /* Передний план: редкие провода, фонари и гирлянды над игровой зоной. Ниже прыжка и карточек не опускаются */
-  _makeFore(x) {
-    const r = this.rng, v = this.game.view, loc = this.loc;
-    const room = v.groundY - 250;                       // всё, что выше, свободно от игры
-    const list = loc.fore || [['wires', 1]];
-    const kind = r.weighted(list), art = ForeArt[kind];
-    const item = { x, kind, w: art.w, seed: r.int(0, 9999), y: Math.max(64, Math.min(room - 70, r.range(70, 160))), skip: room < 150 };
-    item.advance = item.w + r.range(700, 1500);
     return item;
   }
 
@@ -367,19 +353,18 @@ class World {
     }
   }
 
-  /* Полоса растра: точки тем крупнее, чем ближе к земле. Рисуется один раз на район */
-  _strip(loc, kind, ps) {
-    const key = `${kind}:${loc.id}:${ps}`;
+  /* Растр у горизонта: точки тем крупнее, чем ближе к земле. Рисуется один раз на район */
+  _strip(loc, ps) {
+    const key = `${loc.id}:${ps}`;
     if (this.strips[key]) return this.strips[key];
-    const tile = 240, h = kind === 'sky' ? 170 : 64, gap = kind === 'sky' ? 10 : 8;
+    const tile = 240, h = 170, gap = 10;
     const c = document.createElement('canvas');
     c.width = Math.ceil(tile * ps);
     c.height = Math.ceil(h * ps);
     const k = c.getContext('2d');
     k.scale(ps, ps);
     const rows = Math.floor(h / (gap * 0.86));
-    if (kind === 'sky') ink.dots(k, 0, 0, tile, h, gap, 3.3, loc.dots || mix(loc.sky, loc.farColor, 0.55), (row, r) => r * Math.pow(row / rows, 1.5));
-    else ink.dots(k, 0, 0, tile, h, gap, 2.5, loc.sky, (row, r) => r * Math.pow(row / rows, 1.2));
+    ink.dots(k, 0, 0, tile, h, gap, 3.3, loc.dots || mix(loc.sky, loc.farColor, 0.55), (row, r) => r * Math.pow(row / rows, 1.5));
     c.tile = tile; c.h = h;
     this.strips[key] = c;
     return c;
@@ -396,8 +381,8 @@ class World {
     const ps = Math.min(2, v.scale * v.dpr);
     ctx.fillStyle = t >= 1 ? b.sky : mix(a.sky, b.sky, t);
     ctx.fillRect(0, 0, v.w, v.h);
-    if (t < 1) this._drawStrip(ctx, this._strip(a, 'sky', ps), gy - 170, 1 - t);
-    this._drawStrip(ctx, this._strip(b, 'sky', ps), gy - 170, t);
+    if (t < 1) this._drawStrip(ctx, this._strip(a, ps), gy - 170, 1 - t);
+    this._drawStrip(ctx, this._strip(b, ps), gy - 170, t);
 
     // облака ступеньками: три плашки друг на друге
     for (const c of this.clouds) {
@@ -506,27 +491,10 @@ class World {
       ctx.drawImage(f.sprite, snap(f.x - f.pad), gy - f.h, f.sw, f.sh);
     }
 
-    // дымка растром: низ домов светлее, чтобы препятствия не терялись
-    if (this.skyT < 1) this._drawStrip(ctx, this._strip(this.prevLoc, 'haze', ps), gy - 64, (1 - this.skyT) * 0.85);
-    this._drawStrip(ctx, this._strip(this.loc, 'haze', ps), gy - 64, this.skyT * 0.85);
-
     // улица
     for (const it of this.props.items) {
       if (!ready(it, 40) || it.x > v.w + 60) continue;
       ctx.drawImage(it.sprite, snap(it.x - it.pad), gy - it.h, it.sw, it.sh);
-    }
-  }
-
-  /* Передний план рисуется после героя: он ближе всех, но только над игровой зоной */
-  drawFore(ctx) {
-    const v = this.game.view;
-    const c = mix(C.ink2, this.loc.sky, 0.12);
-    for (const it of this.fore.items) {
-      if (it.skip || it.x > v.w + 40 || it.x + it.w < -40) continue;
-      ctx.save();
-      ctx.translate(it.x, 0);
-      ForeArt[it.kind].draw(ctx, it, c);
-      ctx.restore();
     }
   }
 

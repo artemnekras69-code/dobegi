@@ -5,7 +5,6 @@
              павильон, арка ВДНХ, мост в Зарядье, ГЭС-2. Начало координат — левый нижний угол.
    PropArt   улица: деревья, фонари, остановки, заборчик, контейнерная площадка,
              теплотраса, прохожие. Начало координат — середина низа.
-   ForeArt   передний план: провода, фонари на растяжках, гирлянды — только над игровой зоной.
    Всё по правилам city-art.js: без чёрного, плоско, чуть криво.
    ===================================================================== */
 (function (K) {
@@ -615,6 +614,54 @@ const PropArt = {
       fr(k, it.ink, -100, -21, 200, 2);
     },
   },
+  wirePoles: {  // воздушная линия во дворе: две бетонные опоры с подкосами, провода и голуби
+    w: 380, h: 214,
+    draw(k, it) {
+      const X = 150, top = -204, wire = it.ink;
+      for (const side of [-1, 1]) {
+        const x = side * X;
+        fp(k, it.trunk, [x - side * 34, 0, x - side * 28, 0, x + side * 1, -118, x - side * 3, -122]);    // подкос
+        fp(k, it.trunk, [x - 4.5, 0, x + 4.5, 0, x + 2.6, top, x - 2.6, top]);                            // стойка
+        fr(k, it.ink, x - 5.5, -12, 11, 12);
+        fr(k, it.ink, x - 17, top + 9, 34, 3.2);                                                          // траверса
+        for (const dx of [-14, 0, 14]) fr(k, C.white, x + dx - 1.6, top + 3, 3.2, 6);                     // изоляторы
+      }
+      fp(k, it.trunk, [X - 2, -168, X - 30, -176, X - 30, -172, X - 2, -162]);                            // светильник на опоре
+      fp(k, it.ink, [X - 44, -178, X - 24, -177, X - 24, -171, X - 44, -172]);
+      fr(k, LIT, X - 42, -172, 15, 2.4);
+      k.strokeStyle = wire;
+      k.lineWidth = 1.5;
+      k.beginPath();
+      [-14, 0, 14].forEach((dx, i) => { k.moveTo(-X + dx, top + 3); k.quadraticCurveTo(dx, top + 44 + i * 5, X + dx, top + 3); });
+      k.stroke();
+      // голуби сидят на среднем проводе: высоту берём с той же кривой
+      const sag = t => top + 3 + 2 * t * (1 - t) * 41;
+      for (const t of [0.34, 0.4, 0.61]) {
+        const px = -X + 2 * X * t, y = sag(t);
+        fp(k, it.ink, [px - 8, y, px - 3, y - 8, px + 5, y - 6.4, px + 11, y + 1.6]);
+        fr(k, it.ink, px - 10, y - 12.4, 6, 6);
+      }
+    },
+  },
+  garlandLamps: { // флажки между двумя фонарями-торшерами: праздник у города всегда
+    w: 290, h: 170,
+    draw(k, it) {
+      const X = 120;
+      for (const x of [-X, X]) { k.save(); k.translate(x, 0); PropArt.lampOld.draw(k, it); k.restore(); }
+      const y0 = -121, drop = 38;
+      k.strokeStyle = it.ink;
+      k.lineWidth = 1.4;
+      k.beginPath();
+      k.moveTo(-X + 2, y0);
+      k.quadraticCurveTo(0, y0 + drop * 2, X - 2, y0);
+      k.stroke();
+      const tones = [mix(C.yellow, it.sky, 0.3), mix(C.danger, it.sky, 0.42), C.white, mix(C.blue, it.sky, 0.25)];
+      for (let i = 1; i < 10; i++) {
+        const t = i / 10, x = -X + 2 * X * t, y = y0 + 4 * t * (1 - t) * drop + 0.6;
+        fp(k, tones[i % 4], [x - 5, y, x + 5, y, x + H(it.seed, i, 1, 3) - 1, y + 11]);
+      }
+    },
+  },
   bollards: {   // гранитные шары и столбики: чтобы не парковались
     w: 150, h: 26,
     draw(k, it) {
@@ -627,62 +674,6 @@ const PropArt = {
 /* ───────────────────────────── ПЕРЕДНИЙ ПЛАН ─────────────────────────────
    Ближе героя, но только над игровой зоной: провода, фонари на растяжках, гирлянды.
    y — координата от верха экрана, c — тёмный тон района. */
-const ForeArt = {
-  wires: {      // пучок проводов с провисом и пара голубей
-    w: 520,
-    draw(ctx, it, c) {
-      ctx.strokeStyle = c;
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.moveTo(-20, it.y + i * 9);
-        ctx.quadraticCurveTo(it.w / 2, it.y + 46 + i * 15, it.w + 20, it.y + 6 + i * 7);
-        ctx.stroke();
-      }
-      ctx.fillStyle = c;
-      for (const px of [it.w * 0.42, it.w * 0.47, it.w * 0.6]) {
-        const y = it.y + 20;
-        ctx.beginPath(); poly(ctx, [px - 9, y, px - 3, y - 9, px + 6, y - 7, px + 12, y + 2, px + 3, y + 4]); ctx.fill();
-        ctx.fillRect(px - 11, y - 14, 7, 7);
-      }
-    },
-  },
-  lampWire: {   // фонарь на растяжке посреди улицы — так светят в центре
-    w: 420,
-    draw(ctx, it, c) {
-      ctx.strokeStyle = c;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-20, it.y);
-      ctx.lineTo(it.w / 2, it.y + 30);
-      ctx.lineTo(it.w + 20, it.y + 4);
-      ctx.stroke();
-      const x = it.w / 2, y = it.y + 30;
-      ctx.fillStyle = c;
-      ctx.fillRect(x - 1.5, y, 3, 12);
-      ctx.beginPath(); poly(ctx, [x - 20, y + 12, x + 20, y + 12, x + 13, y + 30, x - 13, y + 30]); ctx.fill();
-      ctx.fillStyle = LIT;
-      ctx.fillRect(x - 11, y + 30, 22, 5);
-    },
-  },
-  garland: {    // гирлянда поперёк улицы: праздник у города всегда
-    w: 460,
-    draw(ctx, it, c) {
-      ctx.strokeStyle = c;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(-20, it.y);
-      ctx.quadraticCurveTo(it.w / 2, it.y + 70, it.w + 20, it.y + 4);
-      ctx.stroke();
-      for (let i = 1; i < 12; i++) {
-        const t = i / 12, x = -20 + (it.w + 40) * t, y = it.y + 2 + 70 * 2 * t * (1 - t) + 2;
-        ctx.fillStyle = [C.yellow, C.danger, C.white, C.lime][i % 4];
-        ctx.beginPath(); poly(ctx, [x - 5, y, x + 5, y, x, y + 11]); ctx.fill();
-      }
-    },
-  },
-};
-
 /* ───────────────────────────── ДОРОГА ─────────────────────────────
    Машины в нижней полосе — тёмные силуэты чуть светлее асфальта: это не препятствия. */
 function drawTraffic(ctx, t) {
@@ -720,6 +711,6 @@ function drawTraffic(ctx, t) {
   ctx.restore();
 }
 
-Object.assign(K.CityArt, { SPECIAL, PropArt, ForeArt, drawTraffic, person, parked });
+Object.assign(K.CityArt, { SPECIAL, PropArt, drawTraffic, person, parked });
 
 })(window.KTM = window.KTM || {});
