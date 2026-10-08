@@ -460,7 +460,8 @@ button { font: inherit; color: inherit; }
 .over__line--up { color: #5E7A00; }
 .over__line--muted { margin-top: 6px; color: var(--muted); font: 700 12px/1.35 var(--font-text); letter-spacing: 0; text-transform: none; }
 .over__bottom .btn--xl { margin-top: 16px; }
-.over__row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.over__row { display: grid; grid-template-columns: 1.35fr 1fr; gap: 8px; margin-top: 12px; }
+.over__row .btn { white-space: nowrap; padding: 0 10px; gap: 7px; }
 
 .confetti { position: absolute; left: 50%; top: 50%; width: 8px; height: 5px; border-radius: 1px; pointer-events: none; animation: confetti .95s cubic-bezier(.1, .7, .3, 1) both; }
 @keyframes confetti {
@@ -468,11 +469,18 @@ button { font: inherit; color: inherit; }
   to { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)); }
 }
 
+/* ---------- Невысокие экраны: таблица лидеров плотнее ---------- */
+@media (max-height: 640px) {
+  .leaders { gap: 3px; margin-top: 10px; }
+  .leaders__row { min-height: 29px; }
+  .leaders__row.is-gap { margin-top: 7px; }
+}
+
 /* ---------- Низкие экраны: телефон в альбомной ориентации ---------- */
 @media (max-height: 480px) {
   .hud__dist { font-size: 28px; }
   .toast-slot { top: calc(var(--safe-t) + 10px); }
-  .hint { top: calc(var(--safe-t) + 62px); }
+  .hint { top: calc(var(--safe-t) + 78px); }
 
   .screen--menu { align-items: center; background: rgba(28, 28, 28, .9); }
   .menu { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 24px; width: min(100%, 660px); padding-top: 0; }

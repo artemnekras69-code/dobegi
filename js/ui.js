@@ -165,7 +165,7 @@ class UI {
   async openLeaders() {
     this.open('leaders');
     K.analytics.track('leaderboard_opened', { best: this.game.storage.stats.best });
-    const lb = K.leaderboard, show = CONFIG.leaderboard.show;
+    const lb = K.leaderboard, show = window.innerHeight < 640 ? Math.min(7, CONFIG.leaderboard.show) : CONFIG.leaderboard.show;   // на низком экране — короче
     const { rows, player, total } = await lb.top(show);
     const list = this.el.leadersList;
     list.textContent = '';

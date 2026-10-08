@@ -1518,14 +1518,23 @@ class World {
       }
     }
 
+    // Дома и фасады рисуются один раз во внеэкранный холст. То, что ещё за краем экрана,
+    // готовим заранее и не больше одного за кадр — чтобы не было рывков.
+    let budget = 1;
+    const ready = (it, pad) => {
+      if (it.sprite && it.ps === ps) return true;
+      if (it.x > v.w + 20) { if (budget > 0) { budget--; this._sprite(it, ps, pad); } return false; }
+      this._sprite(it, ps, pad);
+      return true;
+    };
+
     // дома целиком
     for (let i = this.backSets.length - 1; i >= 0; i--) {
       const set = this.backSets[i];
       if (set.alpha <= 0) continue;
       ctx.globalAlpha = set.alpha;
       for (const b of set.items) {
-        if (b.x > v.w + 20) continue;
-        if (!b.sprite || b.ps !== ps) this._sprite(b, ps, 6);
+        if (!ready(b, 6) || b.x > v.w + 20) continue;
         ctx.drawImage(b.sprite, snap(b.x - b.pad), gy - b.h - b.extra, b.sw, b.sh);
       }
     }
@@ -1533,8 +1542,7 @@ class World {
 
     // фасады
     for (const f of this.front.items) {
-      if (f.x > v.w + 20) continue;
-      if (!f.sprite || f.ps !== ps) this._sprite(f, ps, 8);
+      if (!ready(f, 8) || f.x > v.w + 20) continue;
       ctx.drawImage(f.sprite, snap(f.x - f.pad), gy - f.h, f.sw, f.sh);
     }
 

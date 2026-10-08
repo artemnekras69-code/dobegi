@@ -274,7 +274,7 @@ K.OBSTACLES = [
     messages: ['Чужие простыни. Сушатся с 1998 года'] },
   { id: 'branch', name: 'Низкая ветка', size: 'HIGH', type: 'duck', w: 92, h: 100, hit: [6, 38, 140], rarity: 'common', minimumDistance: 300, difficulty: 2, biome: ['park', 'premium', 'residential', 'yard', 'stalin'],
     messages: ['Ветку обещали спилить. Управляющая компания думает'] },
-  { id: 'banner', name: 'Растяжка', size: 'HIGH', type: 'duck', w: 124, h: 46, hit: [6, 38, 999], rarity: 'common', minimumDistance: 700, difficulty: 3, biome: ANY, text: 'meme',
+  { id: 'banner', name: 'Растяжка', size: 'HIGH', type: 'duck', w: 124, h: 46, hit: [6, 38, 999], rarity: 'uncommon', minimumDistance: 700, difficulty: 3, biome: ANY, text: 'meme',
     messages: ['«Уже сдали». Написано же'] },
   { id: 'listing', name: 'Огромное объявление', size: 'HIGH', type: 'duck', w: 108, h: 120, hit: [4, 38, 999], rarity: 'rare', minimumDistance: 700, difficulty: 3, biome: ANY, score: 50,
     messages: ['Евротрёшка, 24 м². Третья комната — балкон'] },
