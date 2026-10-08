@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Добеги до квартиры — KeysToMoscow</title>
 <meta name="description" content="Москва. Квартира мечты. Один шанс. Аркада про аренду: прыгай, пригибайся и читай объявления на бегу.">
-<meta name="theme-color" content="#1C1C1C">
+<meta name="theme-color" content="#17130F">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Добеги до квартиры">
 <meta property="og:description" content="Москва. Квартира мечты. Один шанс. Сколько метров продержишься?">
@@ -15,15 +15,15 @@
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="720">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='11' fill='%231C1C1C'/%3E%3Cpath fill='%23D3F44E' fill-rule='evenodd' d='M18.95 21.87 5 38l1.4 7h8l-.8-4H18l-.7-4.4 4 .2-.5-4.2 5.2-.3 2.74-2.5A13 13 0 1 0 18.95 21.87ZM34 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' fill='%2317130F'/%3E%3Cpath fill='%23D3F44E' fill-rule='evenodd' d='M4 16 12 8l14 2 5 9h14v14h-6v-6h-4v8h-6v-8h-3l-5 8-13-1-6-9 2-9Zm8 5v7h7v-7h-7Z'/%3E%3C/svg%3E">
 
-<!-- Шрифты: фирменные (Unbounded, Manrope) и похожие на шрифты вывесок настоящих сетей.
-     Грузятся без блокировки: если сеть медленная, игра стартует на системных -->
+<!-- Шрифт один на всю игру — семейство Sofia Sans: сверхузкое жирное, узкое и обычной ширины.
+     Грузится без блокировки: если сеть медленная, игра стартует на системном -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" media="print" onload="this.media='all'"
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@700;800;900&family=Montserrat:wght@700;900&family=Nunito:wght@900&family=Oswald:wght@600&family=Playfair+Display:ital,wght@1,700&family=Lobster&display=swap">
-<link rel="stylesheet" href="style.css?v=2.2">
+      href="https://fonts.googleapis.com/css2?family=Sofia+Sans+Extra+Condensed:ital,wght@0,600..900;1,800..900&family=Sofia+Sans+Condensed:wght@500..800&family=Sofia+Sans:wght@700..900&display=swap">
+<link rel="stylesheet" href="style.css?v=3.0.3">
 
 <!-- Telegram WebApp SDK подключается, только если игра открыта внутри Telegram.
      В обычном браузере он не нужен; если не загрузится — игра работает как обычно -->
@@ -79,7 +79,7 @@
         <button class="btn btn--primary btn--xl" id="btnPlay" type="button">Играть</button>
         <p class="menu__record"><span id="menuName"></span>Рекорд: <b id="menuBest">0</b></p>
         <div class="menu__links">
-          <button class="btn btn--dark" id="btnLeaders" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cup"/></svg>Таблица лидеров</button>
+          <button class="btn btn--dark" id="btnLeaders" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cup"/></svg>Лидеры</button>
           <button class="btn btn--dark" id="btnHowto" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-help"/></svg>Как играть</button>
           <button class="btn btn--dark" id="btnSettings" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear"/></svg>Настройки</button>
         </div>
@@ -183,29 +183,33 @@
   </section>
 </div>
 
-<!-- Иконки -->
+<!-- Иконки: рубленые, как всё в игре — прямые углы, без скруглений -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-key" viewBox="0 0 48 48"><path fill="currentColor" fill-rule="evenodd" d="M18.95 21.87 5 38l1.4 7h8l-.8-4H18l-.7-4.4 4 .2-.5-4.2 5.2-.3 2.74-2.5A13 13 0 1 0 18.95 21.87ZM34 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></symbol>
-  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5.5v13M15.5 5.5v13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></symbol>
-  <symbol id="i-restart" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 3.8v4h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-share" viewBox="0 0 24 24"><path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5 21 3Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5M6.5 10v9.5h11V10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M7.5 4.5h9v5a4.5 4.5 0 0 1-9 0v-5ZM7.5 6.5H4.5c0 3 1.2 4.5 3.4 4.8M16.5 6.5h3c0 3-1.2 4.5-3.4 4.8M12 14v4M8.5 19.5h7" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.6 2.3c-.8.4-1.2 1-1.2 1.9" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.2" fill="currentColor"/></symbol>
-  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M12 3.5v2.6M12 17.9v2.6M3.5 12h2.6M17.9 12h2.6M6 6l1.8 1.8M16.2 16.2 18 18M18 6l-1.8 1.8M7.8 16.2 6 18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
-  <symbol id="i-tap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.4" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3.3"/></symbol>
-  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v15M6 13.5l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-key" viewBox="0 0 48 48"><path fill="currentColor" fill-rule="evenodd" d="M4 16 12 8l14 2 5 9h14v14h-6v-6h-4v8h-6v-8h-3l-5 8-13-1-6-9 2-9Zm8 5v7h7v-7h-7Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M6 4h4.4v16H6zM13.6 4H18v16h-4.4z"/></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24"><path d="M18.5 14 16 18.5l-8 .5-3.5-7L8 5.5h7.5l3 2.5M20 3v6h-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square" stroke-linejoin="miter"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5 21 3Z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="butt" stroke-linejoin="miter"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 12 12 4l9 8M6 10.5V20h12v-9.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square" stroke-linejoin="miter"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 24 24"><path d="M7 4h10v6l-2.5 4h-5L7 10V4ZM7 6H3.5v3L7 11M17 6h3.5v3L17 11M12 14v4.5M7.5 20h9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><path d="M4 4h16v16H4z" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M9 10V7.5h6V12h-3v2.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"/><path fill="currentColor" d="M10.7 16h2.6v2.4h-2.6z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h18" fill="none" stroke="currentColor" stroke-width="2.2"/><path fill="currentColor" d="M6.5 4h4v6h-4zM14 9h4v6h-4zM8 14h4v6H8z"/></symbol>
+  <symbol id="i-tap" viewBox="0 0 24 24"><path fill="currentColor" d="M9 9h6v6H9z"/><path d="M4 4h16v16H4z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="4 4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 3.5v15M5.5 13l6.5 6.5 6.5-6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="square" stroke-linejoin="miter"/></symbol>
 </svg>
 
-<script src="js/config.js?v=2.2"></script>
-<script src="js/content.js?v=2.2"></script>
-<script src="apartments.js?v=2.2"></script>
-<script src="js/core.js?v=2.2"></script>
-<script src="js/brands.js?v=2.2"></script>
-<script src="js/audio.js?v=2.2"></script>
-<script src="js/art.js?v=2.2"></script>
-<script src="js/city.js?v=2.2"></script>
-<script src="js/ui.js?v=2.2"></script>
-<script src="js/game.js?v=2.2"></script>
+<script src="js/config.js?v=3.0.3"></script>
+<script src="js/content.js?v=3.0.3"></script>
+<script src="apartments.js?v=3.0.3"></script>
+<script src="js/core.js?v=3.0.3"></script>
+<script src="js/ink.js?v=3.0.3"></script>
+<script src="js/brands.js?v=3.0.3"></script>
+<script src="js/audio.js?v=3.0.3"></script>
+<script src="js/art.js?v=3.0.3"></script>
+<script src="js/art-obstacles.js?v=3.0.3"></script>
+<script src="js/city-art.js?v=3.0.3"></script>
+<script src="js/city-props.js?v=3.0.3"></script>
+<script src="js/city.js?v=3.0.3"></script>
+<script src="js/ui.js?v=3.0.3"></script>
+<script src="js/game.js?v=3.0.3"></script>
 </body>
 </html>

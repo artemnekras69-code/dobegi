@@ -67,19 +67,25 @@ class ParticleSystem {
       const k = p.age / p.life;
       ctx.globalAlpha = clamp((p.fade ? 1 - k * k : 1) * p.alpha, 0, 1);
       switch (p.shape) {
-        case 'circle':
+        case 'circle': {                                 // рубленый осколок: пыль, брызги
+          const r = p.size * (1 + k * p.grow), a = p.rot + p.x * 0.05;
           ctx.fillStyle = p.color;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * (1 + k * p.grow), 0, TAU);
+          for (let i = 0; i < 5; i++) { const b = a + i * 1.257, rr = i % 2 ? r * 0.72 : r; if (i) ctx.lineTo(p.x + Math.cos(b) * rr, p.y + Math.sin(b) * rr); else ctx.moveTo(p.x + Math.cos(b) * rr, p.y + Math.sin(b) * rr); }
+          ctx.closePath();
           ctx.fill();
           break;
-        case 'ring':
+        }
+        case 'ring': {                                   // расходящиеся штрихи вместо кольца
+          const r0 = p.size + k * p.grow * 0.55, r1 = p.size + k * p.grow;
           ctx.strokeStyle = p.color;
-          ctx.lineWidth = Math.max(0.5, p.width * (1 - k));
+          ctx.lineWidth = Math.max(0.6, p.width * (1 - k));
+          ctx.lineCap = 'butt';
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size + k * p.grow, 0, TAU);
+          for (let i = 0; i < 10; i++) { const b = i * 0.628 + 0.2; ctx.moveTo(p.x + Math.cos(b) * r0, p.y + Math.sin(b) * r0); ctx.lineTo(p.x + Math.cos(b) * r1, p.y + Math.sin(b) * r1); }
           ctx.stroke();
           break;
+        }
         case 'rect':
           ctx.save();
           ctx.translate(p.x, p.y);
@@ -110,12 +116,15 @@ class ParticleSystem {
           ctx.save();
           ctx.translate(p.x, p.y);
           ctx.scale(pop, pop);
-          ctx.font = `900 ${p.size}px ${FONT.display}`;
+          ctx.rotate(-0.06);
+          ctx.font = `900 ${p.size * 1.25}px ${FONT.display}`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.lineJoin = 'round';
-          ctx.lineWidth = Math.max(3, p.size * 0.22);
+          ctx.lineJoin = 'miter';
+          ctx.miterLimit = 2.4;
+          ctx.lineWidth = Math.max(3, p.size * 0.26);
           ctx.strokeStyle = p.outline || C.ink;
+          ctx.strokeText(p.text, p.size * 0.07, p.size * 0.09);     // плашка-тень со сдвигом, как при печати
           ctx.strokeText(p.text, 0, 0);
           ctx.fillStyle = p.color;
           ctx.fillText(p.text, 0, 0);
@@ -159,6 +168,9 @@ class Player {
     this.jumps = 0;
     this.ducks = 0;
     this.floorNow = 0;          // высота опоры под ногами (для тени и пыли)
+    this.landT = 9;             // сколько прошло после приземления — для кадра «присел»
+    this.crouchAge = 0;         // сколько герой уже пригнут — для кадра входа
+    this.deadT = 0;             // сколько прошло после удара
   }
 
   get hitW() { return this.crouch ? CONFIG.player.crouchWidth : CONFIG.player.hitWidth; }
@@ -183,23 +195,25 @@ class Player {
   releaseCrouch() { this.crouchHeld = false; }
 
   _startCrouch() {
-    if (!this.crouch) { this.crouch = true; this.ducks++; this.game.onCrouch(); }
+    if (!this.crouch) { this.crouch = true; this.crouchAge = 0; this.ducks++; this.game.onCrouch(); }
     this.crouchT = CONFIG.player.crouchTime;
   }
 
   die() {
     this.dead = true;
+    this.deadT = 0;
     this.crouch = false;
     this.onGround = false;
     this.vy = 430;
-    this.sq = 0.18;
-    this.knockV = -150;         // отбрасывает назад от препятствия
+    this.sq = -0.3;             // в момент удара героя плющит
+    this.knockV = -110;         // отбрасывает назад от препятствия
   }
 
   update(dt, speed, floor) {
     const P = CONFIG.player, g = this.game;
 
     if (this.dead) {
+      this.deadT += dt;
       this.knock += this.knockV * dt;
       this.knockV *= Math.exp(-4.5 * dt);
       if (!this.onGround) {
@@ -218,6 +232,8 @@ class Player {
     }
 
     this.buffer -= dt;
+    this.landT += dt;
+    if (this.crouch) this.crouchAge += dt;
 
     if (this.onGround) {
       if (floor > this.h + 0.01) { this.h = floor; this.sq = Math.min(this.sq, -0.1); }   // заскочил на ступеньку
@@ -228,7 +244,7 @@ class Player {
       this.buffer = 0;
       this.onGround = false;
       this.vy = P.jumpVelocity;
-      this.sq = 0.22;
+      this.sq = 0.3;
       this.sqV = 0;
       this.crouch = false;
       this.crouchQueued = false;
@@ -243,7 +259,8 @@ class Player {
         this.h = floor;
         this.vy = 0;
         this.onGround = true;
-        this.sq = -0.24;
+        this.landT = 0;
+        this.sq = -0.3;
         this.sqV = 0;
         g.onLand();
         if (this.crouchQueued || this.crouchHeld) this._startCrouch();
@@ -251,7 +268,8 @@ class Player {
       }
     } else {
       const before = this.phase;
-      this.phase += dt * TAU * clamp(speed / 95, 2.3, 4.4) * (this.crouch ? 1.25 : 1);
+      // цикл бега — 8 кадров: чем быстрее бег, тем чаще шаг, но кадры успевают читаться
+      this.phase += dt * TAU * clamp(speed / 170, 2, 3.4) * (this.crouch ? 1.2 : 1);
       if (Math.floor(this.phase / Math.PI) !== Math.floor(before / Math.PI)) g.onStep();
     }
 
@@ -287,6 +305,7 @@ class Obstacle {
     this.variant = (opts && opts.variant) || 0;
     this.text = (opts && opts.text) || '';
     this.flag = (opts && opts.flag) || '';
+    this.look = (opts && opts.look) || '';
     return this;
   }
 
@@ -296,16 +315,10 @@ class Obstacle {
   }
 
   draw(ctx, gy) {
-    const def = this.def;
-    if (def.type !== 'soft' && def.type !== 'pickup') {
-      ctx.fillStyle = def.type === 'duck' ? 'rgba(28,28,28,.09)' : 'rgba(28,28,28,.13)';
-      ctx.beginPath();
-      ctx.ellipse(this.x + this.w / 2, gy + 2, this.w * 0.54, 3.6, 0, 0, TAU);
-      ctx.fill();
-    }
     ctx.save();
     ctx.translate(this.x, gy);
-    Art.obstacles[def.id](ctx, this);
+    Art.shadowFor(ctx, this);
+    Art.obstacles[this.def.id](ctx, this);
     ctx.restore();
   }
 }
@@ -644,7 +657,12 @@ class LevelGenerator {
     if (def.text === 'meme') opts.text = def.id === 'aboard' ? this.rng.pick(K.SHORT_MEMES) : this.rng.chance(0.4) ? 'УЖЕ СДАЛИ' : this.rng.pick(K.MEMES);
     else if (def.text === 'brand') opts.text = this.rng.pick(loc.brands);
     else if (def.text === 'van') opts.text = this.rng.pick(this.rng.chance(CONFIG.city.brandVans) ? K.VAN_BRANDS : K.VAN_PLAIN);
-    if (def.id === 'car') { const r = this.rng.next(); opts.flag = r < 0.07 ? 'cat' : r < 0.15 ? 'hazard' : ''; }
+    if (def.id === 'car') {
+      const r = this.rng.next();
+      opts.flag = r < 0.07 ? 'cat' : r < 0.15 ? 'hazard' : '';
+      // в дорогих районах машины дорогие, во дворах — «с дачи»
+      opts.look = loc.tags.includes('premium') || loc.tags.includes('business') ? 'lux' : loc.tags.includes('yard') || loc.tags.includes('industrial') ? 'old' : '';
+    }
 
     return { kind: 'obstacle', def, opts, vx: def.vx || 0, lead: choice.info.lead, early: choice.info.early, ix: choice.info.ix, release: choice.info.release };
   }
@@ -713,6 +731,7 @@ class Game {
     this.obstacles = [];
     this.apartments = [];
     this.extras = [];           // пасхалки, которые ни на что не влияют
+    this.impact = null;         // звезда в точке удара
     this.streaks = [];
     this.pointers = new Map();  // активные касания
     this.track = 0;             // пройденный путь в юнитах
@@ -960,6 +979,7 @@ class Game {
     this.obstacles.length = 0;
     this.apartments.length = 0;
     this.extras.length = 0;
+    this.impact = null;
     this.particles.clear();
     this.streaks.length = 0;
     this._dropPointers();
@@ -1079,8 +1099,8 @@ class Game {
       this.particles.emit({
         x: x + (Math.random() - 0.5) * 14, y,
         vx: -30 - Math.random() * 60, vy: -18 - Math.random() * 34,
-        size: 2 + Math.random() * 2.6, grow: 1.4, life: 0.32 + Math.random() * 0.2,
-        color: '#BDBDBD', alpha, drag: 3,
+        size: 2.4 + Math.random() * 2.8, grow: 1.1, life: 0.3 + Math.random() * 0.18,
+        color: C.concrete, alpha, drag: 3, rot: Math.random() * 6,
       });
     }
   }
@@ -1150,6 +1170,7 @@ class Game {
     this.particles.update(dt, dx);
     this._updateExtras(dt, dx);
     this._updateStreaks(dt, dx);
+    if (this.impact) { this.impact.t += dt; if (this.impact.t > 0.2) this.impact = null; }
     this.shake = Math.max(0, this.shake - dt * 42);
     this.flash = Math.max(0, this.flash - dt * 2.6);
     this.kick *= Math.exp(-7 * dt);
@@ -1217,7 +1238,7 @@ class Game {
       this.particles.emit({
         x: this.player.x + (Math.random() - 0.5) * 24, y: gy - 2,
         vx: (Math.random() - 0.3) * 220, vy: -120 - Math.random() * 220, g: 900,
-        size: 2.5 + Math.random() * 3, life: 0.5, color: '#9DBBCB',
+        size: 2.5 + Math.random() * 3, life: 0.5, color: C.blue, rot: Math.random() * 6,
       });
     }
     if (this.ui.toastIdle) this.ui.toast({ title: TEXTS.puddle[0], sub: TEXTS.puddle[1], tone: 'info', ms: 1600, priority: 0 });
@@ -1482,8 +1503,9 @@ class Game {
     K.analytics.track('obstacle_hit', { id: o.def.id, size: o.def.size, meters: Math.floor(this.score.meters), level: this.level });
 
     const ix = p.hitRight, iy = gy - p.h - 24;
+    this.impact = { x: ix + 4, y: iy - 6, t: 0 };
     this._burst(ix, iy, 14, [C.ink, C.danger, C.white]);
-    this.particles.emit({ shape: 'ring', x: ix, y: iy, size: 8, grow: 70, width: 5, life: 0.35, color: C.ink });
+    this.particles.emit({ shape: 'ring', x: ix, y: iy, size: 14, grow: 70, width: 5, life: 0.35, color: C.ink });
   }
 
   _finish() {
@@ -1560,12 +1582,13 @@ class Game {
     // тень героя: на земле или на крыше, куда он запрыгнул
     const floor = p.dead ? 0 : (p.floorNow || 0);
     const sh = clamp(1 - (p.h - floor) / 190, 0.35, 1);
-    ctx.fillStyle = 'rgba(28,28,28,.16)';
-    ctx.beginPath();
-    ctx.ellipse(p.x + p.knock - (p.dead ? 22 : 0), gy - floor + 2, (p.dead ? 30 : 16 + p.duck * 6) * sh, 3.6 * sh, 0, 0, TAU);
-    ctx.fill();
+    const sw = (p.dead ? 30 : 15 + p.duck * 7) * sh, shx = p.x + p.knock - (p.dead ? 4 : 2);
+    K.ink.shadow(ctx, shx - sw, shx + sw, gy - floor + 0.5, 4.5 * sh);
     p.draw(ctx, gy);
+    if (p.dead && p.onGround) Art.dizzy(ctx, p.x + p.knock - 28, gy - 30, this.stateTime);
+    if (this.impact) Art.impact(ctx, this.impact.x, this.impact.y, this.impact.t / 0.2);
     this.particles.draw(ctx);
+    this.world.drawFore(ctx);
 
     if (K.DEBUG) this._drawDebug(ctx);
     ctx.restore();
@@ -1574,6 +1597,12 @@ class Game {
       ctx.fillStyle = `rgba(${this.flashColor},${Math.min(0.75, this.flash)})`;
       ctx.fillRect(0, 0, v.w, v.h);
     }
+
+    // бумажное зерно поверх всего: картинка перестаёт быть стерильной
+    if (!this.grain) this.grain = ctx.createPattern(K.ink.grain(192, 0.03), 'repeat');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = this.grain;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.ui.sync(this.score, Math.floor(this.score.meters));
   }
@@ -1588,13 +1617,13 @@ class Game {
       Art.obstacles.realtor(ctx, { t: e.t });
       ctx.restore();
     } else if (e.kind === 'pigeon') {
-      const y = gy - 6 - e.y, flap = e.fly ? Math.sin(e.t * 30) : 0;
-      ctx.fillStyle = '#7F8995';
-      ctx.beginPath(); ctx.ellipse(e.x, y, 8, 5, 0, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.arc(e.x - 7, y - 4, 3.6, 0, TAU); ctx.fill();
-      if (e.fly) { ctx.beginPath(); poly(ctx, [e.x - 4, y - 2, e.x + 6, y - 2, e.x + 2, y - 2 - 12 * flap]); ctx.fillStyle = '#9AA3AE'; ctx.fill(); }
-      ctx.fillStyle = '#E0733A';
-      ctx.fillRect(e.x - 12, y - 4, 3, 1.6);
+      const y = gy - 6 - e.y, up = e.fly ? Math.floor(e.t * 12) % 2 === 0 : false;
+      const S = Art.S;
+      S(ctx, [e.x - 6, y - 2, e.x + 4, y - 5, e.x + 12, y - 1, e.x + 8, y + 5, e.x - 4, y + 5], C.cool, { lw: 1.8, off: 0 });
+      S(ctx, [e.x - 11, y - 3, e.x - 9, y - 8, e.x - 4, y - 7, e.x - 3, y - 2, e.x - 7, y], '#6F7A85', { lw: 1.6, off: 0 });
+      if (e.fly) S(ctx, up ? [e.x - 2, y - 3, e.x + 7, y - 3, e.x + 4, y - 15] : [e.x - 2, y, e.x + 7, y, e.x + 5, y + 10], '#B6BEC4', { lw: 1.6, off: 0 });
+      ctx.fillStyle = C.ink;
+      ctx.fillRect(e.x - 9, y - 6, 1.4, 1.4);
     }
   }
 
@@ -1630,7 +1659,7 @@ function boot() {
 
   // шрифты для надписей на холсте; когда загрузятся — перерисовать вывески
   if (document.fonts && document.fonts.load) {
-    const fonts = ['900 16px "Unbounded"', '800 16px "Unbounded"', '700 12px "Manrope"', '800 12px "Manrope"'].concat(K.SIGN_FONTS);
+    const fonts = ['900 16px "Sofia Sans Extra Condensed"', 'italic 900 16px "Sofia Sans Extra Condensed"', '700 12px "Sofia Sans Condensed"', '800 12px "Sofia Sans Condensed"', '800 12px "Sofia Sans"', '900 12px "Sofia Sans"'];
     Promise.all(fonts.map(f => document.fonts.load(f, 'Район ₽ Rent').catch(() => {})))
       .then(() => game.world.invalidateSprites());
   }

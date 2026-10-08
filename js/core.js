@@ -15,9 +15,12 @@ const CONFIG = K.CONFIG, TEXTS = K.TEXTS;
 const TAU = Math.PI * 2;
 
 K.DEBUG = /[?&]debug\b/.test(location.search);
+/* Одно семейство на всю игру — Sofia Sans: сверхузкое жирное для цифр и заголовков,
+   узкое для текста, обычной ширины — для части вывесок */
 K.FONT = {
-  display: '"Unbounded", "Arial Black", "Segoe UI", system-ui, sans-serif',
-  text: '"Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  display: '"Sofia Sans Extra Condensed", "Arial Narrow", "Roboto Condensed", Impact, sans-serif',
+  text: '"Sofia Sans Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif',
+  wide: '"Sofia Sans", "Arial Black", system-ui, sans-serif',
 };
 
 /* ───────────────────────────── УТИЛИТЫ ───────────────────────────── */

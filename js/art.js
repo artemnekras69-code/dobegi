@@ -1,1068 +1,287 @@
 /* =====================================================================
-   ДОБЕГИ ДО КВАРТИРЫ — графика игрового слоя
+   ДОБЕГИ ДО КВАРТИРЫ — герой, карточка квартиры и общие детали игрового слоя
 
-   Герой, препятствия и карточки квартир. Всё рисуется на холсте кодом,
-   без картинок. Правило стиля: то, с чем игрок взаимодействует, — яркое
-   и с тёмной обводкой; фон (city.js) — светлый и без обводки.
+   Всё рисуется кодом через «почерк» (ink.js). Иерархия на экране:
+     герой       чёрный силуэт с бумажным ободком — самый контрастный объект в кадре;
+     препятствия чёрный контур 2.6, плоская краска, нажим снизу и справа (art-obstacles.js);
+     карточка    белый лист с лаймовой шапкой и отрывными хвостиками;
+     фон         без чёрного: тонкие линии в тон стены или вовсе без контура (city.js).
 
-   Препятствия рисуются от левого нижнего угла, y вверх — минус.
-   Размеры — как в каталоге (content.js): 33 юнита ≈ 1 метр.
+   Анимация героя покадровая, как в старых аркадах: бег — 8 кадров, прыжок — 3 позы,
+   приземление, присед — вход и 4 кадра шага, удар и падение. Между кадрами позы
+   не сглаживаются — так движение получается резким и «нарисованным».
    ===================================================================== */
 (function (K) {
 'use strict';
 
-const { TAU, clamp, lerp, fmt, rr, dot, poly, stripes } = K.util;
-const CONFIG = K.CONFIG, FONT = K.FONT, C = CONFIG.colors;
+const { TAU, clamp, lerp, hash3 } = K.util;
+const CONFIG = K.CONFIG, FONT = K.FONT, C = CONFIG.colors, ink = K.ink;
 
-/* ───────────────────────────── ПОМОЩНИКИ ───────────────────────────── */
-function outline(ctx, w) {
-  ctx.lineWidth = w || 2.5;
-  ctx.strokeStyle = C.ink;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.stroke();
-}
-/* Скруглённый блок с обводкой. top — координата верха (отрицательная) */
-function block(ctx, x, top, w, h, r, fill, lw) {
-  rr(ctx, x, top, w, h, r);
-  ctx.fillStyle = fill;
-  ctx.fill();
-  outline(ctx, lw);
-}
-function wheel(ctx, x, y, r) {
-  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = C.ink; ctx.fill();
-  ctx.beginPath(); ctx.arc(x, y, r * 0.42, 0, TAU); ctx.fillStyle = '#9A9A9A'; ctx.fill();
-}
-function line(ctx, pts, w, color) {
-  ctx.beginPath();
-  ctx.moveTo(pts[0], pts[1]);
-  for (let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
-  ctx.lineWidth = w;
-  ctx.strokeStyle = color || C.ink;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.stroke();
-}
-/* Надпись, которая сама уменьшается, чтобы влезть в maxW */
-function label(ctx, str, x, y, maxW, size, color, weight, family, align) {
-  let s = size;
-  ctx.font = `${weight || 800} ${s}px ${family || FONT.display}`;
-  const w = ctx.measureText(str).width;
-  if (w > maxW) { s = Math.max(3, s * maxW / w); ctx.font = `${weight || 800} ${s}px ${family || FONT.display}`; }
-  ctx.fillStyle = color;
-  ctx.textAlign = align || 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(str, x, y);
-  return s;
-}
-/* Делит фразу на строки примерно равной длины */
-function wrap(str, maxLines) {
-  const words = String(str).split(' ');
-  if (words.length <= 1 || maxLines <= 1) return [str];
-  const target = Math.ceil(str.length / Math.min(maxLines, words.length));
-  const out = [];
-  let cur = '';
-  for (const w of words) {
-    if (cur && (cur + ' ' + w).length > target && out.length < maxLines - 1) { out.push(cur); cur = w; }
-    else cur = cur ? cur + ' ' + w : w;
-  }
-  if (cur) out.push(cur);
-  return out;
-}
-function multiline(ctx, str, x, yCenter, maxW, size, color, maxLines, gap) {
-  const ls = wrap(str, maxLines || 2), lh = size * (gap || 1.2);
-  ls.forEach((l, i) => label(ctx, l, x, yCenter + (i - (ls.length - 1) / 2) * lh, maxW, size, color));
-}
-/* Сегмент руки или ноги: два звена от точки (x, y). Углы — от направления «вниз», вперёд — плюс */
-function limb(ctx, x, y, a1, l1, a2, l2, width, color) {
-  const kx = x + Math.sin(a1) * l1, ky = y + Math.cos(a1) * l1;
-  const ex = kx + Math.sin(a2) * l2, ey = ky + Math.cos(a2) * l2;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(kx, ky);
-  ctx.lineTo(ex, ey);
-  ctx.stroke();
-  return [ex, ey, a2];
-}
-/* Человек в полный рост (≈ 60 юнитов), стоит по центру cx. Возвращает высоту плеч */
-function person(ctx, cx, o) {
-  const top = o.top || C.ink2, legs = o.legs || C.ink, sway = o.sway || 0, step = o.step || 0;
-  ctx.fillStyle = legs;
-  ctx.fillRect(cx - 6 - step, -24, 5.5, 22);
-  ctx.fillRect(cx + 1.5 + step, -24, 5.5, 22);
-  rr(ctx, cx - 10.5 - step, -4.5, 10.5, 4.5, 2); ctx.fill();
-  rr(ctx, cx - 2.5 + step, -4.5, 10.5, 4.5, 2); ctx.fill();
-  rr(ctx, cx - 9.5, -46, 19, 24, 5);
-  ctx.fillStyle = top;
-  ctx.fill();
-  ctx.fillStyle = o.skin || C.skin;
-  ctx.beginPath();
-  ctx.arc(cx, -54.5 + sway, 7.5, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = o.hair || C.ink;
-  ctx.beginPath();
-  ctx.arc(cx, -55.5 + sway, 7.7, Math.PI, TAU);
-  ctx.closePath();
-  ctx.fill();
-  return -43;
-}
+/* ───────────────────────────── ПОМОЩНИКИ ─────────────────────────────
+   S — форма с контуром, F — плоская деталь без контура, B — коробка, D — «круг», L — линия, T — надпись */
+const S = (ctx, pts, fill, o) => ink.poly(ctx, pts, o ? Object.assign({ fill }, o) : { fill });
+const F = (ctx, pts, fill) => ink.poly(ctx, pts, { fill, lw: 0, off: 0, j: 0.25 });
+const B = (ctx, x, top, w, h, fill, o) => ink.box(ctx, x, top, w, h, o ? Object.assign({ fill }, o) : { fill });
+const D = (ctx, x, y, r, fill, o) => ink.disc(ctx, x, y, r, o ? Object.assign({ fill }, o) : { fill });
+const L = (ctx, pts, lw, color, o) => ink.line(ctx, pts, lw, color, o);
+const T = ink.text;
+const THIN = { lw: 1.5, off: 0, press: 0 };            // внутренняя деталь: тонкий контур, краска точно в линии
+const MID = { lw: 2, off: 1.2 };
 
-const Art = {};
+const Art = { S, F, B, D, L, T, THIN, MID };
 
 /* Ключ в духе логотипа: головка в начале координат, бородка вправо */
 Art.key = function (ctx, s, color, withOutline) {
-  ctx.beginPath();
-  dot(ctx, 0, 0, s * 0.56);
-  ctx.rect(s * 0.3, -s * 0.16, s * 1.15, s * 0.32);
-  ctx.rect(s * 0.86, s * 0.1, s * 0.2, s * 0.34);
-  ctx.rect(s * 1.2, s * 0.1, s * 0.2, s * 0.26);
-  if (withOutline) {
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(1.6, s * 0.3);
-    ctx.strokeStyle = C.ink;
-    ctx.stroke();
-  }
-  ctx.fillStyle = color;
-  ctx.fill();
+  const head = [-s * 0.58, -s * 0.3, -s * 0.2, -s * 0.6, s * 0.3, -s * 0.5, s * 0.5, -s * 0.18,
+    s * 1.5, -s * 0.18, s * 1.5, s * 0.46, s * 1.24, s * 0.46, s * 1.24, s * 0.2, s * 1.04, s * 0.2, s * 1.04, s * 0.5, s * 0.8, s * 0.5, s * 0.8, s * 0.2,
+    s * 0.5, s * 0.2, s * 0.26, s * 0.56, -s * 0.24, s * 0.58, -s * 0.6, s * 0.24];
+  ink.poly(ctx, head, { fill: color, lw: withOutline ? Math.max(1.4, s * 0.22) : 0, off: 0, j: 0, press: withOutline ? undefined : 0 });
   ctx.fillStyle = C.ink;
-  ctx.beginPath();
-  ctx.arc(-s * 0.14, 0, s * 0.17, 0, TAU);
-  ctx.fill();
+  ctx.fillRect(-s * 0.3, -s * 0.16, s * 0.3, s * 0.3);
 };
 
-function cardboard(ctx, x, w, h) {
-  rr(ctx, x + 1.25, -h + 1.25, w - 2.5, h - 2.5, 3);
-  ctx.fillStyle = C.kraft;
-  ctx.fill();
-  ctx.fillStyle = C.kraftLight;
-  ctx.fillRect(x + w / 2 - 4, -h + 2.5, 8, h - 5);
-  ctx.fillStyle = C.ink;
-  ctx.fillRect(x + 2.5, -h + 8.5, w - 5, 1.6);
-  ctx.fillRect(x + 6, -11, 1.6, 6);
-  ctx.fillRect(x + 10, -11, 1.6, 6);
-  rr(ctx, x + 1.25, -h + 1.25, w - 2.5, h - 2.5, 3);
-  outline(ctx);
-}
-
-/* Тросы, на которых висит всё, под чем надо пригибаться */
-function ropes(ctx, x1, y1, x2, y2, spread) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1); ctx.lineTo(x1 - (spread || 0), -900);
-  ctx.moveTo(x2, y2); ctx.lineTo(x2 + (spread || 0), -900);
-  ctx.lineWidth = 1.8;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
-}
-
-/* Кузов легковой машины (140×48). Рисуется и как препятствие, и на эвакуаторе */
-function carBody(ctx, color, glass) {
-  ctx.beginPath();
-  poly(ctx, [3, -8, 3, -20, 8, -27, 36, -31, 50, -46, 104, -46, 116, -33, 134, -31, 137, -24, 137, -8]);
-  ctx.fillStyle = color;
-  ctx.fill();
-  outline(ctx);
-  ctx.fillStyle = glass || '#CFE0E8';
-  ctx.beginPath();
-  poly(ctx, [41, -31.5, 52.5, -43, 75, -43, 75, -31.5]);
-  poly(ctx, [79, -31.5, 79, -43, 102, -43, 110.5, -31.5]);
-  ctx.fill();
-  ctx.lineWidth = 1.6;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
-  line(ctx, [77, -31, 77, -11], 1.4);
-  ctx.fillStyle = '#FFF3C4';
-  rr(ctx, 4, -24.5, 5, 5, 1.5); ctx.fill();
-  ctx.fillStyle = C.danger;
-  rr(ctx, 132.5, -26, 4, 6, 1.5); ctx.fill();
-  wheel(ctx, 30, -11, 11);
-  wheel(ctx, 110, -11, 11);
-}
-
-/* ───────────────────────────── ПРЕПЯТСТВИЯ ───────────────────────────── */
-const O = {};
-
-O.cone = function (ctx) {
-  rr(ctx, 0, -5, 22, 5, 1.5); ctx.fillStyle = C.ink; ctx.fill();
-  ctx.save();
-  ctx.beginPath();
-  poly(ctx, [4, -4, 18, -4, 13, -27, 9, -27]);
-  ctx.fillStyle = C.danger;
-  ctx.fill();
-  ctx.clip();
-  ctx.fillStyle = C.white;
-  ctx.fillRect(0, -18, 22, 5);
-  ctx.restore();
-  ctx.beginPath();
-  poly(ctx, [4, -4, 18, -4, 13, -27, 9, -27]);
-  outline(ctx);
-};
-
-O.box = function (ctx) { cardboard(ctx, 0, 34, 30); };
-
-O.boxes = function (ctx) {
-  cardboard(ctx, 0, 40, 32);
-  ctx.save();
-  ctx.translate(5, -31);
-  ctx.rotate(-0.04);
-  cardboard(ctx, 0, 31, 28);
-  ctx.restore();
-};
-
-O.bags = function (ctx) {
-  const bag = (x, w, h, fill) => {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.bezierCurveTo(x - 3, -h * 0.7, x + w * 0.25, -h, x + w / 2, -h);
-    ctx.bezierCurveTo(x + w * 0.75, -h, x + w + 3, -h * 0.7, x + w, 0);
-    ctx.closePath();
-    ctx.fillStyle = fill;
-    ctx.fill();
-    outline(ctx);
-    line(ctx, [x + w / 2 - 3, -h - 4, x + w / 2, -h, x + w / 2 + 4, -h - 3], 2.2);
-    line(ctx, [x + w * 0.3, -h * 0.55, x + w * 0.4, -h * 0.3], 1.5, 'rgba(255,255,255,.35)');
-  };
-  bag(18, 22, 17, '#4A4A4A');
-  bag(1, 23, 20, C.ink2);
-};
-
-O.suitcase = function (ctx) {
-  line(ctx, [9, -32, 9, -43, 19, -43, 19, -32], 2.4);
-  block(ctx, 2, -33, 24, 29, 4, '#4C9A9A');
-  line(ctx, [8, -33, 8, -5], 1.4);
-  line(ctx, [20, -33, 20, -5], 1.4);
-  wheel(ctx, 7, -3, 3.2);
-  wheel(ctx, 21, -3, 3.2);
-};
-
-O.aboard = function (ctx, o) {
-  line(ctx, [5, -8, 2, -1], 2.6);
-  line(ctx, [25, -8, 28, -1], 2.6);
-  block(ctx, 2, -41, 26, 35, 2.5, C.white);
-  ctx.fillStyle = C.danger;
-  ctx.fillRect(3.5, -39.5, 23, 6);
-  label(ctx, o.text || 'СДАМ', 15, -19, 21, 7, C.ink);
-  ctx.fillStyle = '#B5B5B5';
-  ctx.fillRect(7, -12, 16, 1.4);
-};
-
-O.washer = function (ctx) {
-  block(ctx, 1, -31, 24, 30, 3, '#F1F1F1');
-  line(ctx, [2.5, -25, 23.5, -25], 1.4);
-  ctx.beginPath(); ctx.arc(13, -13, 7.5, 0, TAU); ctx.fillStyle = '#B9C9D1'; ctx.fill(); outline(ctx, 2);
-  ctx.fillStyle = C.ink;
-  ctx.beginPath(); dot(ctx, 6, -28, 1.2); dot(ctx, 20, -28, 1.6); ctx.fill();
-};
-
-O.bin = function (ctx) {
-  ctx.beginPath();
-  poly(ctx, [4, 0, 26, 0, 28.5, -35, 1.5, -35]);
-  ctx.fillStyle = '#4A5B4E';
-  ctx.fill();
-  outline(ctx);
-  line(ctx, [10, -31, 11, -4], 1.3, 'rgba(255,255,255,.25)');
-  line(ctx, [20, -31, 19, -4], 1.3, 'rgba(255,255,255,.25)');
-  block(ctx, 0, -41, 30, 7, 3, '#5F7364');
-};
-
-O.barrier = function (ctx, o) {
-  ctx.beginPath();
-  ctx.moveTo(10, -22); ctx.lineTo(5, -1.5);
-  ctx.moveTo(10, -22); ctx.lineTo(15, -1.5);
-  ctx.moveTo(42, -22); ctx.lineTo(37, -1.5);
-  ctx.moveTo(42, -22); ctx.lineTo(47, -1.5);
-  outline(ctx, 3);
-  ctx.save();
-  rr(ctx, 1.25, -37.5, 49.5, 17, 3);
-  ctx.fillStyle = C.white;
-  ctx.fill();
-  ctx.clip();
-  stripes(ctx, 0, -38, 52, 18, 13, C.danger);
-  ctx.restore();
-  rr(ctx, 1.25, -37.5, 49.5, 17, 3);
-  outline(ctx);
-  ctx.fillStyle = Math.sin(o.t * 9) > 0 ? C.danger : '#8E2B22';
-  ctx.beginPath();
-  ctx.arc(9, -39.5, 3, 0, TAU);
-  ctx.fill();
-  outline(ctx, 1.5);
-};
-
-O.block = function (ctx) {
-  ctx.beginPath();
-  ctx.arc(16, -25, 4.2, Math.PI, 0);
-  ctx.moveTo(52.2, -25);
-  ctx.arc(48, -25, 4.2, 0, Math.PI, true);
-  outline(ctx, 2.2);
-  ctx.save();
-  rr(ctx, 1.25, -27, 61.5, 25.75, 3);
-  ctx.fillStyle = C.concrete;
-  ctx.fill();
-  ctx.clip();
-  ctx.fillStyle = C.white;
-  ctx.fillRect(0, -18, 64, 9);
-  stripes(ctx, 0, -18, 64, 9, 12, C.danger);
-  ctx.restore();
-  rr(ctx, 1.25, -27, 61.5, 25.75, 3);
-  outline(ctx);
-};
-
-O.terminal = function (ctx, o) {
-  rr(ctx, 0, -4, 24, 4, 1.5); ctx.fillStyle = C.ink; ctx.fill();
-  block(ctx, 2, -49, 20, 46, 3, '#5B7FA6');
-  rr(ctx, 5, -45, 14, 11, 2);
-  ctx.fillStyle = Math.sin(o.t * 4) > 0.6 ? '#FFF3C4' : '#DCE9F0';
-  ctx.fill();
-  outline(ctx, 1.4);
-  ctx.fillStyle = C.ink;
-  ctx.beginPath();
-  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) dot(ctx, 8 + c * 4, -29 + r * 4, 1.1);
-  ctx.fill();
-  ctx.fillRect(6, -14, 12, 2);
-};
-
-O.contract = function (ctx) {
-  ctx.save();
-  ctx.translate(18, -2);
-  ctx.rotate(-0.07);
-  block(ctx, -14, -45, 28, 45, 2, C.white);
-  label(ctx, 'ДОГОВОР', 0, -38, 24, 4.6, C.ink);
-  ctx.fillStyle = '#B5B5B5';
-  for (let i = 0; i < 6; i++) ctx.fillRect(-10, -32 + i * 4, i === 5 ? 12 : 20, 1.4);
-  ctx.beginPath();
-  ctx.arc(6, -7, 5, 0, TAU);
-  ctx.lineWidth = 1.6;
-  ctx.strokeStyle = C.danger;
-  ctx.stroke();
-  line(ctx, [-10, -5, -4, -8, -1, -5], 1.3, '#3E78B8');
-  ctx.restore();
-};
-
-O.scooter = function (ctx) {
-  line(ctx, [34, -8, 30, -41], 3.6);
-  line(ctx, [25, -41, 35, -43], 3.6);
-  block(ctx, 27.5, -31, 6.5, 14, 2, '#F2CF3B', 1.6);
-  line(ctx, [8, -6.5, 31, -6.5], 5);
-  wheel(ctx, 7, -5.5, 5.5);
-  wheel(ctx, 36, -5.5, 5.5);
-};
-
-O.bike = function (ctx) {
-  const ring = x => {
-    ctx.beginPath(); ctx.arc(x, -13, 12, 0, TAU);
-    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fill();
-    ctx.lineWidth = 3.2; ctx.strokeStyle = C.ink; ctx.stroke();
-    ctx.beginPath(); ctx.arc(x, -13, 2, 0, TAU); ctx.fillStyle = C.ink; ctx.fill();
-  };
-  ring(14); ring(46);
-  const frame = [14, -13, 26, -30, 42, -30, 46, -13, 42, -30, 31, -13, 14, -13, 31, -13, 26, -30];
-  line(ctx, frame, 5);
-  line(ctx, frame, 2.2, C.danger);
-  line(ctx, [42, -30, 44, -38, 50, -38], 3);
-  rr(ctx, 20, -35.5, 11, 4, 2); ctx.fillStyle = C.ink; ctx.fill();
-  line(ctx, [26, -30, 25, -34], 3);
-};
-
-O.sofa = function (ctx) {
-  ctx.fillStyle = C.ink;
-  ctx.fillRect(7, -4, 4, 4);
-  ctx.fillRect(63, -4, 4, 4);
-  block(ctx, 8, -33, 58, 16, 5, '#93A089');
-  block(ctx, 5, -22, 64, 19, 5, '#A8B59A');
-  line(ctx, [37, -21, 37, -5], 1.4);
-  block(ctx, 0, -27, 12, 24, 5, '#B5C2A7');
-  block(ctx, 62, -27, 12, 24, 5, '#B5C2A7');
-};
-
-O.bench = function (ctx) {
-  line(ctx, [10, -22, 8, -1], 3.4);
-  line(ctx, [60, -22, 62, -1], 3.4);
-  line(ctx, [12, -33, 12, -22], 3);
-  line(ctx, [58, -33, 58, -22], 3);
-  block(ctx, 3, -34, 64, 6, 2.5, '#C79A63', 2);
-  block(ctx, 1, -25, 68, 6.5, 2.5, '#D8B384', 2);
-};
-
-O.planter = function (ctx) {
-  ctx.beginPath();
-  dot(ctx, 14, -34, 9); dot(ctx, 28, -38, 11); dot(ctx, 42, -34, 9);
-  outline(ctx, 4.4);
-  ctx.fillStyle = '#7FA86A';
-  ctx.fill();
-  ctx.fillStyle = '#E3B5B0';
-  ctx.beginPath(); dot(ctx, 20, -39, 2.6); dot(ctx, 35, -41, 2.6); dot(ctx, 44, -35, 2.2); ctx.fill();
-  ctx.beginPath();
-  poly(ctx, [4, -29, 52, -29, 47, -1.5, 9, -1.5]);
-  ctx.fillStyle = C.concrete;
-  ctx.fill();
-  outline(ctx);
-  line(ctx, [7, -22, 49, -22], 1.4, 'rgba(28,28,28,.3)');
-};
-
-O.dumpster = function (ctx) {
-  wheel(ctx, 13, -3.5, 4);
-  wheel(ctx, 55, -3.5, 4);
-  ctx.beginPath();
-  poly(ctx, [5, -4, 63, -4, 66.5, -39, 1.5, -39]);
-  ctx.fillStyle = '#6E8F6A';
-  ctx.fill();
-  outline(ctx);
-  for (const x of [18, 34, 50]) line(ctx, [x, -36, x, -7], 1.4, 'rgba(28,28,28,.35)');
-  block(ctx, 0, -47, 68, 9, 3, '#5C7A58');
-};
-
-O.photographer = function (ctx, o) {
-  line(ctx, [14, -34, 6, -1], 2.2);
-  line(ctx, [14, -34, 14, -1], 2.2);
-  line(ctx, [14, -34, 22, -1], 2.2);
-  // фотограф присел за камерой
-  ctx.fillStyle = C.ink;
-  rr(ctx, 27, -20, 8, 20, 3); ctx.fill();
-  rr(ctx, 37, -20, 8, 20, 3); ctx.fill();
-  rr(ctx, 27, -42, 17, 24, 5); ctx.fillStyle = '#7A8CA3'; ctx.fill();
-  ctx.beginPath(); ctx.arc(33, -47, 7, 0, TAU); ctx.fillStyle = C.skin; ctx.fill();
-  ctx.beginPath(); ctx.arc(33.5, -48, 7.2, Math.PI, TAU); ctx.closePath(); ctx.fillStyle = C.ink; ctx.fill();
-  line(ctx, [30, -36, 22, -40], 4.4, '#7A8CA3');
-  // камера с широкоугольником
-  rr(ctx, 7, -45, 16, 11, 2); ctx.fillStyle = C.ink; ctx.fill();
-  ctx.beginPath();
-  poly(ctx, [7, -43.5, 0.5, -47, 0.5, -32, 7, -35.5]);
-  ctx.fillStyle = C.ink2;
-  ctx.fill();
-  outline(ctx, 1.6);
-  if (Math.sin(o.t * 3.1) > 0.92) {       // вспышка
-    ctx.fillStyle = 'rgba(255,255,255,.95)';
-    ctx.beginPath(); ctx.arc(15, -49, 6, 0, TAU); ctx.fill();
-  }
-};
-
-O.realtor = function (ctx, o) {
-  const sway = Math.sin(o.t * 5) * 0.6;
-  person(ctx, 16, { top: C.ink2, sway });
-  ctx.fillStyle = C.white;
-  ctx.beginPath(); poly(ctx, [11.5, -46, 20, -46, 15.7, -35]); ctx.fill();
-  ctx.fillStyle = C.danger;
-  ctx.beginPath(); poly(ctx, [14.6, -45.5, 16.8, -45.5, 17.4, -38, 15.7, -35, 14, -38]); ctx.fill();
-  block(ctx, 0.8, -40, 10, 14, 2, C.danger, 2);      // папка с договором
-  line(ctx, [9.5, -43, 6.5, -33], 4.6, C.ink2);
-  line(ctx, [24, -43, 28.5, -46.5, 23.5, -52.5 + sway], 4.6, C.ink2);
-  rr(ctx, 21.5, -58 + sway, 4, 8.5, 1.2); ctx.fillStyle = C.ink; ctx.fill();
-};
-
-O.fridge = function (ctx) {
-  ctx.fillStyle = C.ink;
-  ctx.fillRect(3, -2, 5, 2);
-  ctx.fillRect(20, -2, 5, 2);
-  block(ctx, 1, -63, 26, 62, 3, '#EEF1F3');
-  line(ctx, [2.5, -41, 25.5, -41], 1.6);
-  ctx.fillStyle = C.ink;
-  rr(ctx, 20, -58, 2.6, 11, 1.2); ctx.fill();
-  rr(ctx, 20, -37, 2.6, 13, 1.2); ctx.fill();
-  ctx.fillStyle = C.danger;
-  ctx.beginPath(); ctx.arc(9, -52, 2.2, 0, TAU); ctx.fill();
-  ctx.fillStyle = C.lime;
-  ctx.fillRect(6, -34, 5, 4);
-};
-
-O.wardrobe = function (ctx) {
-  ctx.fillStyle = C.ink;
-  ctx.fillRect(4, -3, 5, 3);
-  ctx.fillRect(31, -3, 5, 3);
-  block(ctx, 1, -64, 38, 61, 2, '#B98E62');
-  block(ctx, 0, -68, 40, 5, 1.5, '#9C744C');
-  line(ctx, [20, -62, 20, -5], 1.6);
-  rr(ctx, 5, -58, 11, 22, 1.5); ctx.strokeStyle = 'rgba(28,28,28,.4)'; ctx.lineWidth = 1.2; ctx.stroke();
-  rr(ctx, 24, -58, 11, 22, 1.5); ctx.stroke();
-  ctx.fillStyle = C.ink;
-  ctx.beginPath(); dot(ctx, 17, -32, 1.5); dot(ctx, 23, -32, 1.5); ctx.fill();
-};
-
-O.mattress = function (ctx) {
-  ctx.save();
-  ctx.beginPath();
-  poly(ctx, [3, -1, 17, -1, 28, -64, 14, -64]);
-  ctx.fillStyle = '#F3F0E6';
-  ctx.fill();
-  ctx.clip();
-  ctx.strokeStyle = '#9FB6C9';
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  for (let y = -8; y > -64; y -= 9) { ctx.moveTo(0, y); ctx.lineTo(30, y - 2); }
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(190,150,90,.35)';
-  ctx.beginPath(); ctx.ellipse(17, -30, 5, 7, 0.3, 0, TAU); ctx.fill();
-  ctx.restore();
-  ctx.beginPath();
-  poly(ctx, [3, -1, 17, -1, 28, -64, 14, -64]);
-  outline(ctx);
-};
-
-O.fence = function (ctx) {
-  ctx.fillStyle = '#B9B9B9';
-  rr(ctx, 6, -7, 16, 7, 2); ctx.fill(); outline(ctx, 2);
-  rr(ctx, 50, -7, 16, 7, 2); ctx.fill(); outline(ctx, 2);
-  block(ctx, 1, -61, 70, 56, 2, '#6FA07A');
-  ctx.fillStyle = C.white;
-  ctx.fillRect(2.5, -47, 67, 26);
-  multiline(ctx, 'БУДЕТ БИЗНЕС-КЛАСС', 36, -34, 60, 8, '#3C6B49', 2, 1.25);
-  rr(ctx, 1, -61, 70, 56, 2);
-  outline(ctx);
-};
-
-O.musician = function (ctx, o) {
-  const sway = Math.sin(o.t * 4) * 0.8;
-  block(ctx, 25, -15, 13, 15, 2, C.ink2, 2);
-  ctx.beginPath(); ctx.arc(31.5, -7.5, 4, 0, TAU); ctx.fillStyle = '#8A8A8A'; ctx.fill();
-  person(ctx, 14, { top: '#7A5C9A', sway });
-  line(ctx, [3, -48, 17, -32], 2.4, '#7B4E2A');
-  ctx.beginPath(); ctx.ellipse(17, -30, 8, 6.5, -0.5, 0, TAU); ctx.fillStyle = '#D29A52'; ctx.fill(); outline(ctx, 2);
-  ctx.beginPath(); ctx.arc(17, -30, 2.2, 0, TAU); ctx.fillStyle = C.ink; ctx.fill();
-  line(ctx, [21, -43, 14, -36 + sway], 4.4, '#7A5C9A');
-  // ноты
-  const ny = -66 - (o.t * 14 % 12);
-  ctx.fillStyle = C.ink;
-  ctx.globalAlpha = 1 - (o.t * 14 % 12) / 12;
-  ctx.beginPath(); ctx.ellipse(27, ny, 2.6, 2, -0.4, 0, TAU); ctx.fill();
-  ctx.fillRect(28.8, ny - 8, 1.3, 8);
-  ctx.globalAlpha = 1;
-};
-
-O.janitor = function (ctx, o) {
-  const sweep = Math.sin(o.t * 6) * 0.12;
-  ctx.save();
-  ctx.translate(14, -44);
-  ctx.rotate(0.2 + sweep);
-  line(ctx, [0, -6, -2, 40], 2.4, '#8A6F55');
-  ctx.beginPath(); poly(ctx, [-8, 36, 4, 36, 6, 45, -11, 45]); ctx.fillStyle = C.kraft; ctx.fill(); outline(ctx, 2);
-  ctx.restore();
-  person(ctx, 24, { top: '#F08A3C', legs: '#3B4A63' });
-  ctx.fillStyle = '#E9E9E9';
-  ctx.fillRect(14.5, -38, 19, 3);
-  ctx.fillRect(14.5, -31, 19, 3);
-  line(ctx, [17, -43, 13, -34], 4.6, '#F08A3C');
-  rr(ctx, 16.5, -64, 15, 5, 2.5); ctx.fillStyle = '#F08A3C'; ctx.fill();
-};
-
-const CAR_COLORS = ['#F4F4F4', '#C9584C', '#6E8FB0', '#C9CED3', '#3A3A3A'];
-O.car = function (ctx, o) {
-  // обычные машины — почти все; такси и каршеринг — по одной из шестнадцати
-  const roll = o.variant % 16, taxi = roll === 15, sharing = roll === 14;
-  const color = taxi ? '#F2CF3B' : sharing ? '#F4F4F4' : CAR_COLORS[roll % CAR_COLORS.length];
-  carBody(ctx, color, color === '#3A3A3A' ? '#8FA3B0' : '#CFE0E8');
-  if (taxi) {                             // такси «ЯнЕдет»: шашечки и фонарь на крыше
-    ctx.fillStyle = C.ink;
-    for (let i = 0; i < 12; i++) if (i % 2) ctx.fillRect(10 + i * 10, -30, 10, 3.6);
-    K.sign(ctx, 'ЯнЕдет', 52, -25.5, 48, 12, { radius: 2 });
-    block(ctx, 67, -53, 20, 7, 2.5, '#FFDD2D', 1.6);
-  } else if (sharing) {                   // каршеринг «ДелиКвартиру»
-    ctx.fillStyle = '#00A86B';
-    ctx.fillRect(8, -13.5, 124, 3.2);
-    K.sign(ctx, 'ДелиКвартиру', 44, -26, 62, 12, { radius: 2 });
-  }
-  if (o.flag === 'cat') {                 // кот на капоте
-    ctx.fillStyle = C.ink;
-    ctx.beginPath(); ctx.ellipse(22, -36, 7, 6, 0, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(15.5, -42, 4.4, 0, TAU); ctx.fill();
-    ctx.beginPath(); poly(ctx, [12, -44, 12.5, -49.5, 15.5, -45.5]); poly(ctx, [16, -45.5, 19, -49.5, 19.3, -44]); ctx.fill();
-    line(ctx, [28, -33, 33, -37 + Math.sin(o.t * 3) * 2], 2.4);
-    ctx.fillStyle = C.lime;
-    ctx.beginPath(); dot(ctx, 14, -42.5, 0.9); dot(ctx, 17, -42.5, 0.9); ctx.fill();
-  } else if (o.flag === 'hazard') {       // аварийка: «я на минутку»
-    ctx.fillStyle = Math.sin(o.t * 10) > 0 ? '#FFB02E' : 'rgba(255,176,46,.25)';
-    ctx.beginPath(); dot(ctx, 7, -17, 3.4); dot(ctx, 134, -18, 3.4); ctx.fill();
-  }
-};
-
-O.gazelle = function (ctx, o) {
-  ctx.fillStyle = C.ink2;
-  ctx.fillRect(6, -18, 166, 7);
-  // кабина — в дальнем конце
-  ctx.beginPath();
-  poly(ctx, [126, -13, 126, -60, 150, -60, 165, -41, 173.5, -37, 173.5, -13]);
-  ctx.fillStyle = '#DDE3E8';
-  ctx.fill();
-  outline(ctx);
-  ctx.beginPath();
-  poly(ctx, [132, -56, 148, -56, 159.5, -41.5, 132, -41.5]);
-  ctx.fillStyle = '#CFE0E8';
-  ctx.fill();
-  outline(ctx, 1.6);
-  ctx.fillStyle = '#FFF3C4';
-  rr(ctx, 168, -30, 5, 6, 1.5); ctx.fill();
-  // будка
-  block(ctx, 4, -76.5, 122, 62, 3, '#F4F4F4');
-  if (K.BRANDS[o.text]) K.sign(ctx, o.text, 10, -68, 110, 34, { radius: 3 });   // борт в фирменном стиле
-  else {
-    label(ctx, o.text || 'ПЕРЕЕЗДЫ', 65, -54, 106, 15, C.danger, 900, K.SIGN_FONT.mont);
-    label(ctx, 'квартирные · 24/7', 65, -38, 92, 7.5, C.ink, 700, FONT.text);
-  }
-  ctx.fillStyle = C.danger;
-  ctx.fillRect(5.5, -24, 119, 3);
-  wheel(ctx, 34, -12, 12);
-  wheel(ctx, 148, -12, 12);
-};
-
-O.towtruck = function (ctx, o) {
-  ctx.fillStyle = C.ink2;
-  ctx.fillRect(4, -30, 150, 8);
-  ctx.fillRect(6, -22, 200, 6);
-  ctx.save();
-  ctx.translate(12, -30);
-  ctx.scale(0.92, 0.92);
-  carBody(ctx, '#C9CED3');
-  ctx.restore();
-  ctx.beginPath();
-  poly(ctx, [156, -14, 156, -60, 184, -60, 199, -42, 209.5, -38, 209.5, -14]);
-  ctx.fillStyle = '#F2A93B';
-  ctx.fill();
-  outline(ctx);
-  ctx.beginPath();
-  poly(ctx, [162, -56, 182, -56, 193.5, -42.5, 162, -42.5]);
-  ctx.fillStyle = '#CFE0E8';
-  ctx.fill();
-  outline(ctx, 1.6);
-  rr(ctx, 164, -66, 12, 6, 2);
-  ctx.fillStyle = Math.sin(o.t * 12) > 0 ? '#FFB02E' : '#A8651A';
-  ctx.fill();
-  outline(ctx, 1.6);
-  label(ctx, 'ЭВАКУАЦИЯ', 80, -18.6, 96, 5.6, C.white);
-  wheel(ctx, 34, -12, 12);
-  wheel(ctx, 122, -12, 12);
-  wheel(ctx, 184, -12, 12);
-};
-
-O.dog = function (ctx, o) {
-  const p = o.t * 17, bob = Math.sin(p * 2) * 0.9;
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = C.ink;
-  ctx.lineWidth = 3.4;
-  ctx.beginPath();
-  for (const [lx, ph] of [[15, 0], [20, Math.PI], [33, Math.PI * 0.5], [38, Math.PI * 1.5]]) {
-    ctx.moveTo(lx, -11 + bob);
-    ctx.lineTo(lx - Math.sin(p + ph) * 5, -1.7 - Math.max(0, Math.cos(p + ph)) * 3);
-  }
-  ctx.stroke();
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(40, -19 + bob);
-  ctx.quadraticCurveTo(46, -22, 44.5, -28.5 + Math.sin(p) * 1.5);
-  ctx.stroke();
-  ctx.fillStyle = C.ink;
-  rr(ctx, 11, -23 + bob, 31, 13, 6.5); ctx.fill();
-  ctx.beginPath(); dot(ctx, 10, -21.5 + bob, 7.5); ctx.fill();
-  rr(ctx, -0.5, -22 + bob, 9, 6.5, 3); ctx.fill();
-  ctx.beginPath(); poly(ctx, [9, -27.5 + bob, 16.5, -31 + bob, 16.5, -22 + bob]); ctx.fill();
-  ctx.fillStyle = C.danger;
-  ctx.fillRect(16, -26.5 + bob, 3, 10.5);
-  ctx.fillStyle = C.white;
-  ctx.beginPath(); ctx.arc(7.5, -23.5 + bob, 1.5, 0, TAU); ctx.fill();
-};
-
-O.courier = function (ctx, o) {
-  // штрихи скорости за спиной
-  ctx.strokeStyle = 'rgba(28,28,28,.3)';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  for (let i = 0; i < 3; i++) { const y = -18 - i * 14, x = 46 + ((o.t * 90 + i * 13) % 16); ctx.moveTo(x, y); ctx.lineTo(x + 10, y); }
-  ctx.stroke();
-  line(ctx, [11, -7, 14, -41], 3.2);
-  line(ctx, [9, -41, 19, -42], 3.2);
-  line(ctx, [8, -6, 34, -6], 4.6);
-  wheel(ctx, 7, -5, 5);
-  wheel(ctx, 37, -5, 5);
-  ctx.fillStyle = C.ink;
-  ctx.fillRect(20, -28, 5.5, 22);
-  ctx.fillRect(27, -28, 5.5, 22);
-  const pink = o.variant % 3 === 0;               // термокороб: жёлтый «ЯнЕдет» или розовый «СамоСнял»
-  K.sign(ctx, pink ? 'СамоСнял' : 'ЯнЕдет', 28, -53, 17, 22, { radius: 3 });
-  rr(ctx, 28, -53, 17, 22, 3);
-  outline(ctx, 2);
-  ctx.save();
-  ctx.translate(27, -28);
-  ctx.rotate(-0.2);
-  rr(ctx, -9, -22, 17, 23, 5); ctx.fillStyle = '#3B4A63'; ctx.fill();
-  ctx.restore();
-  ctx.beginPath(); ctx.arc(19, -55, 7, 0, TAU); ctx.fillStyle = C.skin; ctx.fill();
-  ctx.beginPath(); ctx.arc(19.5, -56, 7.6, Math.PI * 0.95, Math.PI * 2.05); ctx.closePath(); ctx.fillStyle = '#F2CF3B'; ctx.fill(); outline(ctx, 1.4);
-  line(ctx, [23, -45, 15, -41], 4.4, '#3B4A63');
-};
-
-O.pvzman = function (ctx, o) {
-  const step = Math.sin(o.t * 12) * 2.2;
-  person(ctx, 26, { top: '#5E7B5C', legs: '#3B4A63', step });
-  line(ctx, [20, -42, 12, -30], 4.6, '#5E7B5C');
-  // стопка коробок выше головы
-  cardboard(ctx, 0, 20, 16);
-  ctx.save(); ctx.translate(0, -15 - 14); cardboard(ctx, 1, 18, 14.5); ctx.restore();
-  ctx.save(); ctx.translate(0, -15 - 14 - 13.5); cardboard(ctx, 2, 17, 14); ctx.restore();
-  ctx.save(); ctx.translate(0, -15 - 14 - 13.5 - 13); cardboard(ctx, 0.5, 18, 14); ctx.restore();
-  ctx.save();
-  ctx.translate(0, 0);
-  ctx.fillStyle = '#8E3C8A';
-  ctx.fillRect(3, -24.5, 14, 3);
-  ctx.restore();
-};
-
-/* ── HIGH: всё, под чем нужно пригнуться. Нижний край — на высоте 38 ── */
-/* Вывеска на кронштейне. Столб стоит за дорожкой (он светлый и не мешает),
-   а световой короб висит на цепях прямо над тротуаром. */
-O.bracket = function (ctx, o) {
-  ctx.fillStyle = '#B4B9BF';
-  rr(ctx, 92, -128, 7, 128, 2); ctx.fill();
-  ctx.fillRect(89, -8, 13, 8);
-  line(ctx, [3, -86, 96, -86], 4.4, C.ink2);
-  line(ctx, [96, -64, 72, -86], 3, C.ink2);
-  ctx.save();
-  ctx.translate(44, -84);
-  ctx.rotate(Math.sin(o.t * 2.2) * 0.018);
-  line(ctx, [-32, 0, -32, 16], 1.8);
-  line(ctx, [32, 0, 32, 16], 1.8);
-  K.sign(ctx, o.text || 'Шестёрочка', -42, 16, 84, 30, { radius: 5 });
-  rr(ctx, -42, 16, 84, 30, 5);
-  outline(ctx);
-  ctx.restore();
-};
-
-O.pigeons = function (ctx, o) {
-  const bird = (x, y, ph) => {
-    const flap = Math.sin(o.t * 22 + ph);
-    ctx.beginPath();
-    poly(ctx, [x + 2, y - 2, x + 12, y - 2, x + 8, y - 2 - 11 * flap]);
-    ctx.fillStyle = '#9AA3AE';
-    ctx.fill();
-    outline(ctx, 1.6);
-    ctx.beginPath(); ctx.ellipse(x + 6, y, 8, 4.4, 0, 0, TAU); ctx.fillStyle = '#7F8995'; ctx.fill(); outline(ctx, 1.8);
-    ctx.beginPath(); ctx.arc(x - 2.5, y - 2.5, 3.6, 0, TAU); ctx.fillStyle = '#7F8995'; ctx.fill(); outline(ctx, 1.8);
-    line(ctx, [x - 6, y - 2.5, x - 8.5, y - 1.5], 1.8, '#E0733A');
-    line(ctx, [x + 13, y, x + 18, y + 1], 2.4, '#7F8995');
-  };
-  bird(14, -50, 0);
-  bird(34, -63, 1.7);
-  bird(42, -46, 3.1);
-};
-
-O.gate = function (ctx) {
-  // стойка стоит за дорожкой — она светлая и не мешает
-  ctx.fillStyle = '#BFC3C8';
-  rr(ctx, 116, -62, 13, 62, 2); ctx.fill();
-  ctx.fillStyle = '#A9AEB4';
-  ctx.fillRect(116, -40, 13, 4);
-  ctx.save();
-  rr(ctx, 0, -50, 124, 10.5, 3.5);
-  ctx.fillStyle = C.white;
-  ctx.fill();
-  ctx.clip();
-  stripes(ctx, 0, -50, 124, 10.5, 16, C.danger);
-  ctx.restore();
-  rr(ctx, 0, -50, 124, 10.5, 3.5);
-  outline(ctx);
-};
-
-O.beam = function (ctx, o) {
-  ctx.save();
-  ctx.translate(50, -110);
-  ctx.rotate(Math.sin(o.t * 1.7) * 0.02);
-  ctx.translate(-50, 110);
-  ctx.beginPath();
-  ctx.moveTo(22, -62); ctx.lineTo(50, -108);
-  ctx.moveTo(78, -62); ctx.lineTo(50, -108);
-  ctx.moveTo(50, -108); ctx.lineTo(50, -900);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
-  block(ctx, 44, -114, 12, 9, 2, '#F2CF3B', 2);
-  ctx.save();
-  rr(ctx, 0, -62, 100, 23.5, 2.5);
-  ctx.fillStyle = '#B5553C';
-  ctx.fill();
-  ctx.clip();
-  ctx.fillStyle = 'rgba(0,0,0,.18)';
-  ctx.fillRect(0, -56, 100, 11.5);
-  ctx.fillStyle = C.white;
-  ctx.fillRect(0, -62, 12, 24);
-  ctx.fillRect(88, -62, 12, 24);
-  stripes(ctx, 0, -62, 12, 24, 9, C.danger);
-  stripes(ctx, 88, -62, 12, 24, 9, C.danger);
-  ctx.restore();
-  rr(ctx, 0, -62, 100, 23.5, 2.5);
-  outline(ctx);
-  ctx.restore();
-};
-
-O.laundry = function (ctx, o) {
-  // столбы за дорожкой
-  ctx.fillStyle = '#C4C8CC';
-  ctx.fillRect(-5, -92, 4, 92);
-  ctx.fillRect(117, -90, 4, 90);
-  ctx.beginPath();
-  ctx.moveTo(-3, -88);
-  ctx.quadraticCurveTo(58, -78, 119, -86);
-  ctx.lineWidth = 1.8;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
-  const w = Math.sin(o.t * 2.6) * 1.5;
-  // простыня
-  ctx.beginPath(); poly(ctx, [6, -85, 46, -82, 45 + w, -40, 8 + w, -42]); ctx.fillStyle = '#FAFAFA'; ctx.fill(); outline(ctx, 2);
-  // футболка
-  ctx.beginPath(); poly(ctx, [54, -82, 60, -82, 63, -79, 69, -79, 72, -82, 78, -82, 82, -74, 77, -71, 76 + w, -50, 56 + w, -50, 55, -71, 50, -74]);
-  ctx.fillStyle = C.lime; ctx.fill(); outline(ctx, 2);
-  // штаны
-  ctx.beginPath(); poly(ctx, [88, -83, 110, -84, 111 + w, -39, 102 + w, -39, 99, -68, 97 + w, -39, 88 + w, -39]);
-  ctx.fillStyle = '#6E8FB0'; ctx.fill(); outline(ctx, 2);
-};
-
-O.branch = function (ctx, o) {
-  // ствол стоит за дорожкой
-  ctx.fillStyle = '#C3B7A6';
-  ctx.beginPath(); poly(ctx, [70, 0, 84, 0, 81, -190, 74, -190]); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(78, -86);
-  ctx.quadraticCurveTo(50, -76, 8, -58);
-  ctx.lineWidth = 9;
-  ctx.strokeStyle = C.ink;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  ctx.lineWidth = 4.5;
-  ctx.strokeStyle = '#8A6F55';
-  ctx.stroke();
-  const sway = Math.sin(o.t * 1.8) * 1.2;
-  const blobs = [[16, -56, 17], [36, -66, 18], [58, -78, 19], [26, -84, 16], [48, -98, 17], [70, -104, 16], [12, -74, 12]];
-  ctx.beginPath();
-  for (const [x, y, r] of blobs) dot(ctx, x + sway, y, r);
-  outline(ctx, 5);
-  ctx.fillStyle = '#7FA86A';
-  ctx.fill();
-  ctx.fillStyle = '#93BA7D';
-  ctx.beginPath(); dot(ctx, 30 + sway, -72, 9); dot(ctx, 54 + sway, -90, 8); ctx.fill();
-};
-
-/* Растяжка между двумя столбами (столбы — за дорожкой) */
-O.banner = function (ctx, o) {
-  ctx.fillStyle = '#B4B9BF';
-  rr(ctx, -16, -124, 6, 124, 2); ctx.fill();
-  rr(ctx, 134, -124, 6, 124, 2); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(-13, -118); ctx.lineTo(5, -84);
-  ctx.moveTo(-13, -60); ctx.lineTo(5, -40);
-  ctx.moveTo(137, -118); ctx.lineTo(119, -84);
-  ctx.moveTo(137, -60); ctx.lineTo(119, -40);
-  ctx.lineWidth = 1.6;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
-  ctx.save();
-  ctx.translate(62, -84);
-  ctx.rotate(Math.sin(o.t * 2) * 0.012);
-  block(ctx, -58, 0, 116, 45, 4, C.white);
-  ctx.fillStyle = C.danger;
-  ctx.fillRect(-56.5, 1.5, 113, 5.5);
-  ctx.fillRect(-56.5, 38, 113, 5.5);
-  multiline(ctx, o.text || 'УЖЕ СДАЛИ', 0, 22.5, 102, 13, C.ink, 2, 1.12);
-  ctx.restore();
-};
-
-/* Огромное объявление на раме: стойки и перекладина — за дорожкой */
-O.listing = function (ctx, o) {
-  ctx.fillStyle = '#B4B9BF';
-  rr(ctx, -14, -178, 7, 178, 2); ctx.fill();
-  rr(ctx, 115, -178, 7, 178, 2); ctx.fill();
-  ctx.fillRect(-14, -178, 136, 6);
-  line(ctx, [16, -172, 16, -158], 1.8);
-  line(ctx, [92, -172, 92, -158], 1.8);
-  ctx.save();
-  ctx.translate(54, -158);
-  ctx.rotate(Math.sin(o.t * 1.6) * 0.018);
-  rr(ctx, -48, 5, 104, 118, 10); ctx.fillStyle = C.ink; ctx.fill();
-  block(ctx, -52, 0, 104, 118, 10, C.white, 3);
-  label(ctx, 'ЕВРОТРЁШКА', 0, 20, 88, 11, C.ink);
-  label(ctx, '24 м²', 0, 46, 88, 21, C.ink, 900);
-  label(ctx, '95 000 ₽', 0, 72, 88, 17, C.ink, 900);
-  rr(ctx, -40, 88, 80, 19, 9.5); ctx.fillStyle = C.ink; ctx.fill();
-  label(ctx, 'КОМИССИЯ 100%', 0, 98, 70, 8, C.white);
-  ctx.restore();
-};
-
-/* ── Не убивают ── */
-O.puddle = function (ctx, o) {
-  ctx.beginPath(); ctx.ellipse(44, -1, 43, 4.2, 0, 0, TAU); ctx.fillStyle = '#9DBBCB'; ctx.fill();
-  ctx.lineWidth = 1.6; ctx.strokeStyle = '#6F91A3'; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,.7)';
-  ctx.beginPath(); ctx.ellipse(30 + Math.sin(o.t * 2) * 3, -1.6, 9, 1.1, 0, 0, TAU); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(58, -0.6, 6, 0.9, 0, 0, TAU); ctx.fill();
-};
-
-O.keys = function (ctx, o) {
-  const bob = Math.sin(o.t * 5) * 3;
-  ctx.save();
-  ctx.translate(13, -20 + bob);
-  ctx.beginPath(); ctx.arc(0, -3, 22, 0, TAU); ctx.fillStyle = 'rgba(211,244,78,.28)'; ctx.fill();
-  ctx.rotate(-0.5 + Math.sin(o.t * 3) * 0.2);
-  Art.key(ctx, 9, C.lime, true);
-  ctx.rotate(1.25);
-  Art.key(ctx, 7.5, C.white, true);
-  ctx.restore();
-};
-
-Art.obstacles = O;
-
-/* Стрелка «вниз» под объектом, под которым нужно пригнуться (первые встречи) */
+/* Стрелка «вниз» под объектом, под которым нужно пригнуться (первые встречи). Дёргается, а не плавает */
 Art.duckCue = function (ctx, x, gy, t) {
-  const bob = Math.sin(t * 9) * 2.5;
+  const step = Math.floor(t * 6) % 2 ? 3 : 0;
   ctx.save();
-  ctx.translate(x, gy - 20 + bob);
-  ctx.beginPath();
-  poly(ctx, [-9, -8, 9, -8, 0, 4]);
-  ctx.fillStyle = C.lime;
-  ctx.fill();
-  outline(ctx, 2.2);
+  ctx.translate(x, gy - 22 + step);
+  S(ctx, [-10, -9, -3.5, -9, -3.5, -17, 3.5, -17, 3.5, -9, 10, -9, 0, 4], C.lime, { lw: 2.2, off: 0 });
   ctx.restore();
 };
 
 /* ───────────────────────────── ГЕРОЙ ─────────────────────────────
-   Три позы: бег, прыжок, пригнувшись. p.air и p.duck (0…1) плавно их смешивают. */
-function drawLeg(ctx, x, y, th, bend, len, color) {
-  const [fx, fy, sa] = limb(ctx, x, y, th, len, th - bend, len, 6.2, color);
+   Большая голова, вихры назад, чёрное худи, лаймовый рюкзак, белые кроссовки.
+   Точка отсчёта — ступни, y вверх — минус. Смотрит вправо. */
+const BODY = { thigh: 11, shin: 11.5, torso: 15.5, upper: 8.5, fore: 8 };
+const HALO = 1.5;                                        // бумажный ободок вокруг героя
+
+/* Кадры бега. a — ведущая нога [бедро, голень], b — толчковая; углы от «вниз», вперёд — плюс.
+   arm — плечо ближней руки (дальняя — в противофазе). up — таз в кадре полёта. */
+const RUN = [
+  { a: [0.88, 0.6], b: [-0.72, -1.4], lean: 0.32, arm: -1.05, toe: 0.4 },      // контакт: нога вынесена, пятка в землю
+  { a: [0.84, -0.84], b: [-0.3, -1.8], lean: 0.38, arm: -0.6, toe: 0 },        // присел на опорной
+  { a: [-0.1, -0.5], b: [0.55, -1.3], lean: 0.27, arm: 0.15, toe: 0 },         // пронос
+  { a: [-0.66, -1.0], b: [1.12, -0.16], lean: 0.2, arm: 0.9, up: -25.5 },      // толчок и полёт
+];
+/* Пригнувшись: корпус почти лежит, шаг короткий */
+const DUCK = [
+  { a: [1.25, -0.5], b: [0.3, -1.9], lean: 1.32, hip: -11.5 },
+  { a: [0.75, -1.35], b: [0.95, -1.15], lean: 1.26, hip: -10.5 },
+];
+const POSE = {
+  duckIn: { n: [1.0, -0.9], f: [0.2, -1.5], lean: 0.85, hip: -15, an: [0.9, 2.2], af: [-0.6, 0.6] },
+  // в воздухе ближняя рука уходит назад и не закрывает лицо, дальняя тянется вперёд из-за головы
+  rise: { n: [1.2, -0.4], f: [-0.4, -1.0], lean: 0.12, hip: -24, an: [-0.9, -0.1], af: [2.3, 2.8] },
+  apex: { n: [1.35, -0.7], f: [0.85, -1.05], lean: 0.24, hip: -22, an: [-1.7, -2.3], af: [1.6, 2.4] },
+  fall: { n: [0.6, 0.28], f: [-0.2, -0.62], lean: 0.02, hip: -24.5, an: [-2.5, -2.95], af: [2.4, 2.9] },
+  land: { n: [1.0, -1.0], f: [0.5, -1.5], lean: 0.52, hip: -14.5, an: [0.5, 1.5], af: [-0.9, 0.3] },
+  hit: { n: [1.2, 0.9], f: [-1.0, -0.6], lean: -0.5, hip: -23, an: [-2.2, -2.7], af: [2.4, 2.0] },
+  flop: { n: [1.1, 0.5], f: [0.6, 1.0], lean: -0.2, hip: -23, an: [-2.0, -2.5], af: [2.6, 2.9] },
+};
+
+/* Герой собирается из групп: дальняя рука, дальняя нога, корпус, голова, ближняя нога, ближняя рука.
+   У каждой группы общий бумажный ободок — он отделяет её от фона и от остального тела,
+   а внутри группы швов нет. */
+function turn(pts, ox, oy, a) {
+  const c = Math.cos(a), s = Math.sin(a), out = new Array(pts.length);
+  for (let i = 0; i < pts.length; i += 2) { out[i] = ox + pts[i] * c - pts[i + 1] * s; out[i + 1] = oy + pts[i] * s + pts[i + 1] * c; }
+  return out;
+}
+function group(ctx, pieces) {
+  for (const q of pieces) q.p = ink.rough(q.pts, 0.35, q.seed);
+  ctx.lineJoin = 'round';
+  for (const q of pieces) {
+    ink.trace(ctx, q.p, true);
+    ink.setLine(ctx, (q.lw || 0) + HALO * 2, C.paper);
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+  for (const q of pieces) {
+    ink.trace(ctx, q.p, true);
+    ctx.fillStyle = q.fill;
+    ctx.fill();
+    if (q.lw) { ink.setLine(ctx, q.lw, C.ink); ctx.stroke(); }
+  }
+}
+
+function heroLeg(ctx, hx, hy, th, sh, fill, toe, seed) {
+  const kx = hx + Math.sin(th) * BODY.thigh, ky = hy + Math.cos(th) * BODY.thigh;
+  const fx = kx + Math.sin(sh) * BODY.shin, fy = ky + Math.cos(sh) * BODY.shin;
+  const rot = toe === undefined ? -sh * 0.8 : -toe;
+  group(ctx, [
+    { pts: ink.wedge(hx, hy, 7.6, kx, ky, 6.2), fill, seed },
+    { pts: ink.wedge(kx, ky, 6.2, fx, fy, 4.8), fill, seed: seed + 1 },
+    // кроссовок: большой, белый
+    { pts: turn([-4.6, -3.4, 2.6, -3.8, 9.8, 0.2, 10.4, 3.4, -5, 3.4], fx, fy, rot), fill: C.white, lw: 1.9, seed: seed + 2 },
+  ]);
+  // лаймовая подошва
+  ink.poly(ctx, turn([-4.2, 1.5, 9.6, 1.5, 9.6, 2.9, -4.2, 2.9], fx, fy, rot), { fill: C.lime, lw: 0, off: 0, j: 0 });
+}
+
+function heroArm(ctx, sx, sy, up, fo, fill, seed) {
+  const ex = sx + Math.sin(up) * BODY.upper, ey = sy + Math.cos(up) * BODY.upper;
+  const hx = ex + Math.sin(fo) * BODY.fore, hy = ey + Math.cos(fo) * BODY.fore;
+  group(ctx, [
+    { pts: ink.wedge(sx, sy, 6, ex, ey, 5), fill, seed },
+    { pts: ink.wedge(ex, ey, 5, hx, hy, 4.2), fill, seed: seed + 1 },
+    { pts: [hx - 2.5, hy - 2.5, hx + 2.7, hy - 2.3, hx + 2.5, hy + 2.7, hx - 2.3, hy + 2.5], fill: C.skin, lw: 1.4, seed: seed + 2 },
+  ]);
+}
+
+/* Одна поза: n/f — ближняя и дальняя нога, an/af — руки [плечо, предплечье] */
+function heroPose(ctx, q, o) {
+  o = o || {};
+  const far = '#4B433B', hx = q.hx || 0, hy = q.hip;
+  const sx = hx + Math.sin(q.lean) * BODY.torso, sy = hy - Math.cos(q.lean) * BODY.torso;
+
+  heroArm(ctx, sx - 1, sy + 1.5, q.af[0], q.af[1], far, 40);
+  heroLeg(ctx, hx - 1.2, hy, q.f[0], q.f[1], far, q.ftoe, 50);
+
+  // корпус: рюкзак, худи, капюшон
+  group(ctx, [
+    { pts: turn([-17, -17.5, -7.5, -18.5, -7, -4, -16, -3], hx, hy, q.lean), fill: C.lime, lw: 2.2, seed: 10 },
+    { pts: turn([-7.4, 2.5, 6.8, 2.5, 8.2, -8.5, 6.2, -17.5, -4.6, -18.6, -8.6, -10], hx, hy, q.lean), fill: C.ink, seed: 14 },
+    { pts: turn([-9, -14, -5, -22, 2.5, -19.5, -1, -13], hx, hy, q.lean), fill: C.ink, seed: 18 },
+  ]);
+  ink.poly(ctx, turn([-16.2, -11.8, -7.8, -12.6, -7.8, -10.8, -16.2, -10], hx, hy, q.lean), { fill: C.ink, lw: 0, off: 0, j: 0 });
+
+  // голова держится ровнее корпуса: герой смотрит вперёд
+  const low = q.lean > 0.9;
+  const tilt = q.lean * (low ? 0.22 : 0.45) + (q.head || 0);
+  const cx = sx + Math.sin(q.lean) * 6.5 + 1.2, cy = sy - Math.cos(q.lean) * 6.5 - 4.5 + (low ? 3.5 : 0);
+  const w = o.hair || 0;
+  group(ctx, [
+    { pts: turn([-8.2, -3.5, -5, -8.6, 4.2, -8.8, 8.6, -4.8, 8.4, -0.5, 10.8, 2, 7.8, 3.6, 7, 7.2, 2, 8.8, -5, 8.2, -8.6, 3.4], cx, cy, tilt), fill: C.skin, lw: 2.2, seed: 22 },
+    // вихры: три клина назад, шевелятся от кадра к кадру
+    { pts: turn([-9.4, 3.2, -14.5 - w, 1.2 + w, -10, -2.2, -15.5 - w, -6 - w, -9, -7, -11.5 - w * 0.6, -13 + w, -4, -11.2, 4.6, -11.4, 9.6, -6.6, 9, -3.4, 1, -3.8, -2.6, 2.2], cx, cy, tilt), fill: C.ink, seed: 26 },
+  ]);
   ctx.save();
-  ctx.translate(fx, fy);
-  ctx.rotate(-sa);
-  rr(ctx, -3.4, -2.6, 10.5, 5.6, 2.6);
-  ctx.fillStyle = C.lime;
-  ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
+  ctx.translate(cx, cy);
+  ctx.rotate(tilt);
+  ctx.fillStyle = C.ink;
+  if (o.dead) {                                         // крестик вместо глаза и открытый рот
+    ctx.save();
+    ctx.translate(4.6, 0.4);
+    ctx.rotate(0.78);
+    ctx.fillRect(-3, -0.8, 6, 1.6);
+    ctx.fillRect(-0.8, -3, 1.6, 6);
+    ctx.restore();
+    ctx.fillRect(4.6, 4.6, 3.2, 2.4);
+  } else {
+    ctx.fillRect(4, -1.6, 2, 3.8);
+    if (o.wince) ctx.fillRect(2.6, -3.8, 5, 1.4);       // сведённая бровь, когда тяжело
+  }
   ctx.restore();
+
+  heroLeg(ctx, hx + 1.4, hy, q.n[0], q.n[1], C.ink, q.ntoe, 60);
+  heroArm(ctx, sx + 0.5, sy + 1.5, q.an[0], q.an[1], C.ink, 70);
+}
+
+const legDrop = l => Math.cos(l[0]) * BODY.thigh + Math.cos(l[1]) * BODY.shin;
+
+/* Поза по состоянию игрока. Возвращает объект для heroPose */
+function heroFrame(p) {
+  const P = CONFIG.player;
+  if (p.dead) return p.deadT < 0.1 ? POSE.hit : POSE.flop;
+  if (!p.onGround) {
+    const u = p.vy / P.jumpVelocity;
+    return u > 0.42 ? POSE.rise : u > -0.34 ? POSE.apex : POSE.fall;
+  }
+  if (p.crouch) {
+    if (p.crouchAge < 0.05) return POSE.duckIn;
+    const i = Math.floor(p.phase / (TAU / 4)) % 4, d = DUCK[i % 2], swap = i >= 2;
+    const sw = i % 2 ? 0.25 : -0.25;
+    return { n: swap ? d.b : d.a, f: swap ? d.a : d.b, lean: d.lean, hip: d.hip, an: [1.35 + sw, 2.3 + sw], af: [0.5 - sw, 1.7 - sw], ntoe: 0, ftoe: 0 };
+  }
+  if (p.landT < 0.075) return POSE.land;
+  const i = Math.floor(p.phase / (TAU / 8)) % 8, r = RUN[i % 4], swap = i >= 4;
+  const hip = r.up !== undefined ? r.up : -(legDrop(r.a) + 3.3);
+  const armN = swap ? -r.arm : r.arm;
+  const toeN = swap ? undefined : r.toe, toeF = swap ? r.toe : undefined;
+  return {
+    n: swap ? r.b : r.a, f: swap ? r.a : r.b, lean: r.lean, hip,
+    an: [armN, armN + 1.5], af: [-armN, -armN + 1.5],
+    ntoe: toeN === undefined ? undefined : toeN, ftoe: toeF === undefined ? undefined : toeF,
+  };
 }
 
 Art.player = function (ctx, p, gy) {
   const P = CONFIG.player;
   ctx.save();
   ctx.translate(p.x + p.knock, gy - p.h);
-  if (p.dead) {
-    const k = Math.min(1, -p.rot / (Math.PI / 2));
-    ctx.translate(-4 * k, -8 * k);
-    ctx.rotate(p.rot);
+  if (p.dead && p.deadT >= 0.1) {
+    // кувырок назад по кадрам, а не плавным поворотом
+    const rot = Math.round(p.rot / (Math.PI / 6)) * (Math.PI / 6), k = Math.min(1, -p.rot / (Math.PI / 2));
+    ctx.translate(20 * k, -9 * k);                      // лежит головой назад, но не уезжает за край экрана
+    ctx.rotate(rot);
   }
-  ctx.scale(P.scale * (1 - p.sq * 0.55), P.scale * (1 + p.sq));
-
-  const a = p.dead ? 1 : p.air;                 // 0 — на земле, 1 — в воздухе
-  const d = p.dead ? 0 : p.duck;                // 0 — стоя, 1 — пригнувшись
-  const u = p.dead ? 0.2 : clamp(0.5 + 0.5 * p.vy / P.jumpVelocity, 0, 1);   // 1 — взлёт, 0 — приземление
-  const ph = p.phase;
-
-  // бег
-  const runTh = q => 0.82 * Math.sin(q), runBend = q => 0.2 + 1.05 * Math.max(0, Math.cos(q));
-  // пригнувшись: колени согнуты, шаги короткие
-  const duckTh = q => 0.75 + 0.5 * Math.sin(q), duckBend = q => 1.75 + 0.3 * Math.cos(q);
-  const groundTh = q => lerp(runTh(q), duckTh(q), d), groundBend = q => lerp(runBend(q), duckBend(q), d);
-
-  const legF = [lerp(groundTh(ph), lerp(0.5, 1.05, u), a), lerp(groundBend(ph), lerp(0.35, 1.5, u), a)];
-  const legB = [lerp(groundTh(ph + Math.PI), lerp(-0.55, -0.15, u), a), lerp(groundBend(ph + Math.PI), lerp(0.6, 1.3, u), a)];
-  const armRunF = lerp(-0.95 * Math.sin(ph), 1.5 + 0.15 * Math.sin(ph), d);
-  const armRunB = lerp(0.95 * Math.sin(ph), 1.2 - 0.15 * Math.sin(ph), d);
-  const armF = lerp(armRunF, lerp(0.9, 2.5, u), a);
-  const armB = lerp(armRunB, lerp(-1.2, -0.4, u), a);
-  const bob = p.onGround && !p.dead ? -Math.abs(Math.sin(ph)) * lerp(1.8, 0.8, d) : 0;
-  const hipY = lerp(-21, -11.5, d * (1 - a)) + bob;
-  const lean = lerp(0.14 + a * 0.05, 1.28, d * (1 - a));
-  const shoulderX = lerp(3, 16, d * (1 - a)), shoulderY = hipY + lerp(-17, -5, d * (1 - a));
-
-  // дальние рука и нога
-  limb(ctx, shoulderX - 2, shoulderY, armB, 8.5, armB + 1.1, 8, 5, '#454545');
-  drawLeg(ctx, -1.5, hipY, legB[0], legB[1], 10, '#454545');
-
-  // корпус
-  ctx.save();
-  ctx.translate(0, hipY);
-  ctx.rotate(lean);
-  rr(ctx, -15.5, -19.5, 9.5, 15, 3.5);           // рюкзак
-  ctx.fillStyle = C.lime;
-  ctx.fill();
-  ctx.lineWidth = 1.8;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
-  rr(ctx, -8, -22, 16, 24.5, 7);                 // худи
-  ctx.fillStyle = C.ink;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(-4.5, -22, 4.8, 0, TAU);               // капюшон
-  ctx.fill();
-  // голова: когда герой пригибается, она смотрит вперёд, а не в землю
-  ctx.save();
-  ctx.translate(1.5, -29.5);
-  ctx.rotate(-lean * 0.72);
-  ctx.beginPath();
-  ctx.arc(0, 0, 8, 0, TAU);
-  ctx.fillStyle = C.skin;
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(-0.3, -1.1, 8.3, Math.PI * 0.97, Math.PI * 2.03);    // шапка
-  ctx.closePath();
-  ctx.fillStyle = C.ink;
-  ctx.fill();
-  if (p.dead) {
-    ctx.strokeStyle = C.ink;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(2.3, -0.1); ctx.lineTo(5.1, 2.7);
-    ctx.moveTo(5.1, -0.1); ctx.lineTo(2.3, 2.7);
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.arc(3.9, 1.3, 1.15, 0, TAU);
-    ctx.fill();
-  }
-  ctx.restore();
-  ctx.restore();
-
-  // ближние нога и рука (в руке ничего нет)
-  drawLeg(ctx, 1.5, hipY, legF[0], legF[1], 10, C.ink2);
-  limb(ctx, shoulderX, shoulderY, armF, 8.5, armF + 1.15, 8, 5.2, C.ink);
+  ctx.scale(P.scale * (1 - p.sq * 0.6), P.scale * (1 + p.sq));
+  const frame = heroFrame(p);
+  const hair = p.dead ? 2.5 : !p.onGround ? (p.vy < 0 ? 3 : -1) : (Math.floor(p.phase / (TAU / 8)) % 2 ? 1.2 : 0);
+  heroPose(ctx, frame, { dead: p.dead, hair, wince: p.crouch });
   ctx.restore();
 };
 
-/* ───────────────────────────── КАРТОЧКА КВАРТИРЫ ─────────────────────────────
-   Все карточки выглядят одинаково: хорошую от плохой игрок отличает по цифрам.
-   Рисуется от левого верхнего угла в «родном» размере 168×120. */
-Art.card = function (ctx, a) {
-  const W = 168, H = 120;
-  rr(ctx, 4, 5, W, H, 15);
-  ctx.fillStyle = C.ink;
-  ctx.fill();
-  rr(ctx, 0, 0, W, H, 15);
-  ctx.fillStyle = C.white;
-  ctx.fill();
-  ctx.lineWidth = 2.6;
-  ctx.strokeStyle = C.ink;
-  ctx.stroke();
-
-  // заголовок
-  label(ctx, a.title, 13, 20, W - 26, 11.5, C.muted, 800, FONT.display, 'left');
-
-  // главное: метры и цена
-  label(ctx, a.areaText, 13, 46.5, W - 26, 24, C.ink, 900, FONT.display, 'left');
-  label(ctx, a.priceText, 13, 75.5, W - 26, 24, C.ink, 900, FONT.display, 'left');
-
-  // метро и мелкая приписка
-  ctx.beginPath();
-  ctx.arc(21.5, 102, 8.5, 0, TAU);
-  ctx.fillStyle = C.ink;
-  ctx.fill();
-  ctx.fillStyle = C.white;
-  ctx.font = `900 9.5px ${FONT.display}`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('М', 21.5, 102.7);
-  ctx.font = `800 13px ${FONT.display}`;
-  ctx.fillStyle = C.ink;
-  ctx.textAlign = 'left';
-  ctx.fillText(a.metroText, 35, 102.5);
-  if (a.data.note) {
-    const used = 35 + ctx.measureText(a.metroText).width + 7;
-    label(ctx, a.data.note, used, 103, W - used - 10, 10.5, C.muted, 700, FONT.text, 'left');
+/* Удар: колючая «звезда» в точке столкновения. k — 0…1, сколько прошло */
+Art.impact = function (ctx, x, y, k) {
+  const n = 9, big = 26 + k * 16, small = big * 0.52, pts = [];
+  for (let i = 0; i < n * 2; i++) {
+    const a = i / (n * 2) * TAU + 0.2, r = (i % 2 ? small : big) * (1 + ink.jit(7, i) * 0.16);
+    pts.push(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.86);
   }
+  ink.poly(ctx, pts, { fill: k < 0.45 ? C.white : C.yellow, lw: 2.6, off: 0, j: 0 });
+};
+
+/* Звёздочки над головой упавшего героя */
+Art.dizzy = function (ctx, x, y, t) {
+  const step = Math.floor(t * 8);
+  for (let i = 0; i < 3; i++) {
+    const a = (step * 0.5 + i * 2.1), sx = x + Math.cos(a) * 14, sy = y + Math.sin(a) * 4.5;
+    const r = 4.2, pts = [];
+    for (let j = 0; j < 8; j++) { const b = j / 8 * TAU + step * 0.4, rr = j % 2 ? r * 0.45 : r; pts.push(sx + Math.cos(b) * rr, sy + Math.sin(b) * rr); }
+    ink.poly(ctx, pts, { fill: C.yellow, lw: 1.4, off: 0, j: 0, press: 0 });
+  }
+};
+
+/* ───────────────────────────── КАРТОЧКА КВАРТИРЫ ─────────────────────────────
+   Объявление с отрывными хвостиками. Все карточки одинаковые: хорошую от плохой игрок
+   отличает только по цифрам. Рисуется от левого верхнего угла в размере 168×120. */
+Art.card = function (ctx, a) {
+  const W = 168, H = 102, seed = hash3(a.data.id | 0, a.data.area | 0, 3);
+  // плоская тень: лист висит в воздухе
+  ctx.fillStyle = C.ink;
+  ctx.beginPath();
+  ctx.moveTo(5, 6); ctx.lineTo(W + 5, 6); ctx.lineTo(W + 5, H + 6); ctx.lineTo(5, H + 6);
+  ctx.closePath();
+  ctx.fill();
+
+  // хвостики с телефоном: пара уже оторвана
+  const tabs = 7, tw = W / tabs;
+  for (let i = 0; i < tabs; i++) {
+    const torn = (seed >> i) % 5 === 0, len = torn ? 3 + (seed >> (i + 3)) % 4 : 17 - (i % 2);
+    ink.poly(ctx, [i * tw + 0.6, H - 1, (i + 1) * tw - 0.6, H - 1, (i + 1) * tw - 0.8, H + len, i * tw + 0.8, H + len], { fill: C.white, lw: 1.6, off: 0, j: 0.35, press: 0 });
+    if (!torn) { ctx.fillStyle = C.muted; ctx.fillRect(i * tw + tw / 2 - 1.2, H + 3, 1, 9); ctx.fillRect(i * tw + tw / 2 + 0.8, H + 3, 1, 9); }
+  }
+
+  ink.poly(ctx, [0, 0, W, 0, W, H, 0, H], { fill: C.white, lw: 3, off: 0, j: 0.5, seed: 5 });
+  ctx.fillStyle = C.lime;
+  ctx.fillRect(1.6, 1.6, W - 3.2, 24);
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(1.5, 25.4, W - 3, 2.2);
+
+  // шапка: что сдают и приписка
+  T(ctx, a.title, 9, 14.2, { size: 19, maxW: a.data.note ? 86 : W - 18, align: 'left' });
+  if (a.data.note) T(ctx, a.data.note, W - 8, 14.4, { size: 12.5, maxW: 66, align: 'right', font: FONT.text, weight: 700 });
+
+  // главное: площадь и цена — самыми крупными цифрами
+  T(ctx, a.areaText, 9, 47.5, { size: 37, maxW: 92, align: 'left' });
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(108, 37.5, 19, 19);
+  T(ctx, 'М', 117.5, 47.6, { size: 17, color: C.white });
+  T(ctx, a.metroText, 131, 47.6, { size: 20, maxW: 31, align: 'left' });
+  ctx.fillStyle = C.ink;
+  ctx.fillRect(8, 64.6, W - 16, 1.4);
+  T(ctx, a.priceText, 9, 84.5, { size: 37, maxW: W - 18, align: 'left' });
 };
 
 K.Art = Art;

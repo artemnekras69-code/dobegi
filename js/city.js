@@ -1,206 +1,27 @@
 /* =====================================================================
-   ДОБЕГИ ДО КВАРТИРЫ — город
+   ДОБЕГИ ДО КВАРТИРЫ — город: мир вокруг дорожки
 
-   Четыре плана за спиной героя и один перед ним:
-     дальний    силуэты (Сити, Кремль, Останкино…)        параллакс 0.06
-     средний    дома целиком                               параллакс 0.22
-     фасады     первые этажи, магазины, вывески            параллакс 0.5
-     улица      деревья, фонари, остановки, метро          параллакс 0.72
-     дорога     машины в нижней полосе — перед героем, но ниже игровой дорожки
+   Собирает и двигает слои, рисует небо, землю и нижнюю полосу с названием района.
+   Как выглядят дома и улица — в city-art.js и city-props.js.
 
-   Всё, что здесь, — светлое и без обводки: это фон. Яркое и обведённое —
-   только то, с чем игрок взаимодействует (art.js).
-   Размеры настоящие: герой 58 юнитов, этаж ≈ 60–80, фонарь ≈ 235.
+   Что за чем стоит (от дальнего к ближнему):
+     небо          плоский цвет, растр у горизонта, ступенчатые облака
+     дальний план  силуэты одним цветом                       параллакс 0.06
+     средний       дома целиком                               0.22
+     фасады        первые этажи, магазины, объявления          0.5
+     улица         деревья, фонари, остановки                 0.72
+     дорожка       герой, препятствия, карточки — рисует game.js
+     передний      провода и гирлянды над игровой зоной       1.35
+     дорога        машины в нижней полосе, разметка, люки
    ===================================================================== */
 (function (K) {
 'use strict';
 
-const { TAU, clamp, lerp, fmt, makeRng, hash3, mix, shade, rr, dot, poly } = K.util;
-const CONFIG = K.CONFIG, FONT = K.FONT, C = CONFIG.colors;
-
-function fitFont(k, str, maxW, size, weight, family) {
-  let s = size;
-  k.font = `${weight || 800} ${s}px ${family || FONT.display}`;
-  const w = k.measureText(str).width;
-  if (w > maxW) { s = Math.max(3, s * maxW / w); k.font = `${weight || 800} ${s}px ${family || FONT.display}`; }
-  return s;
-}
-function text(k, str, x, y, maxW, size, color, weight, family) {
-  fitFont(k, str, maxW, size, weight, family);
-  k.fillStyle = color;
-  k.textAlign = 'center';
-  k.textBaseline = 'middle';
-  k.fillText(str, x, y);
-}
-/* Цвет вывески: фирменный, но приглушённый, чтобы не спорил с игрой */
-const soft = (hex, wall) => mix(hex, wall || '#E6E6E6', 0.22);
-
-/* ───────────────────────────── ДАЛЬНИЙ ПЛАН ─────────────────────────────
-   Силуэты одним цветом. draw(ctx) добавляет фигуры в текущий контур. */
-const FarArt = {
-  blocks: {
-    w: 220,
-    draw(ctx, it) {
-      for (let i = 0, x = 0; i < 7; i++) {
-        const w = 22 + (hash3(it.seed, i, 1) % 18), h = 46 + (hash3(it.seed, i, 2) % 86);
-        ctx.rect(x, -h, w, h);
-        x += w + 3 + (hash3(it.seed, i, 3) % 8);
-      }
-    },
-  },
-  cranes: {
-    w: 170,
-    draw(ctx) {
-      ctx.rect(40, -160, 3, 160); ctx.rect(8, -160, 104, 2.6); ctx.rect(8, -160, 13, 11); ctx.rect(92, -158, 1, 34); ctx.rect(88, -126, 9, 6);
-      ctx.rect(128, -112, 2.6, 112); ctx.rect(96, -112, 74, 2.2); ctx.rect(156, -112, 11, 9);
-      ctx.rect(0, -44, 70, 44); ctx.rect(84, -62, 40, 62);
-    },
-  },
-  roofs: {          // рядовая застройка центра: низкие дома, скаты крыш, трубы
-    w: 240,
-    draw(ctx, it) {
-      for (let i = 0, x = 0; i < 6; i++) {
-        const w = 30 + (hash3(it.seed, i, 1) % 22), h = 30 + (hash3(it.seed, i, 2) % 34);
-        ctx.rect(x, -h, w, h);
-        poly(ctx, [x - 2, -h, x + w * 0.5, -h - 9 - (hash3(it.seed, i, 4) % 8), x + w + 2, -h]);
-        if (hash3(it.seed, i, 3) % 3 === 0) ctx.rect(x + w * 0.64, -h - 17, 5, 14);
-        x += w + 2 + (hash3(it.seed, i, 5) % 6);
-      }
-    },
-  },
-  treeline: {       // кромка парка
-    w: 260,
-    draw(ctx, it) {
-      for (let i = 0; i < 9; i++) {
-        const r = 20 + (hash3(it.seed, i, 1) % 16);
-        dot(ctx, 14 + i * 29, -r * 0.9 - (hash3(it.seed, i, 2) % 14), r);
-      }
-      ctx.rect(0, -22, 260, 22);
-    },
-  },
-  ostankino: {      // Останкинская башня
-    w: 40, scale: 1.25,
-    draw(ctx) {
-      poly(ctx, [6, 0, 16, -62, 17.5, -176, 22.5, -176, 24, -62, 34, 0]);
-      ctx.rect(13, -196, 14, 22);
-      ctx.rect(15, -214, 10, 18);
-      ctx.rect(18.8, -300, 2.4, 90);
-    },
-  },
-  city: {           // Москва-Сити
-    w: 260,
-    draw(ctx) {
-      ctx.rect(-8, -26, 268, 26);
-      poly(ctx, [0, 0, 0, -118, 26, -128, 26, 0]);
-      poly(ctx, [34, 0, 34, -190, 50, -236, 64, -196, 64, 0]);
-      ctx.rect(49, -266, 2, 32);
-      poly(ctx, [70, 0, 70, -148, 81, -176, 92, -148, 92, 0]);
-      ctx.rect(100, -150, 30, 150); ctx.rect(104, -178, 22, 30); ctx.rect(108, -198, 14, 22);
-      poly(ctx, [138, 0, 143, -62, 136, -122, 146, -152, 164, -152, 158, -122, 166, -62, 160, 0]);
-      poly(ctx, [172, 0, 172, -158, 196, -172, 196, 0]);
-      ctx.rect(204, -138, 18, 138); ctx.rect(226, -164, 20, 164); ctx.rect(230, -172, 12, 10);
-    },
-  },
-  vysotka: {        // сталинская высотка
-    w: 140,
-    draw(ctx) {
-      poly(ctx, [0, 0, 0, -50, 24, -50, 24, -80, 46, -80, 46, -130, 58, -130, 58, -165, 66, -180, 70, -232,
-                 74, -180, 82, -165, 82, -130, 94, -130, 94, -80, 116, -80, 116, -50, 140, -50, 140, 0]);
-    },
-  },
-  chimneys: {       // ТЭЦ: трубы и градирня
-    w: 190,
-    draw(ctx) {
-      poly(ctx, [20, 0, 26, -150, 34, -150, 40, 0]);
-      poly(ctx, [68, 0, 73, -118, 80, -118, 85, 0]);
-      poly(ctx, [112, 0, 119, -172, 128, -172, 135, 0]);
-      poly(ctx, [146, 0, 153, -42, 151, -66, 181, -66, 179, -42, 186, 0]);
-      dot(ctx, 34, -160, 9); dot(ctx, 44, -170, 12); dot(ctx, 58, -178, 10);
-      dot(ctx, 170, -74, 10); dot(ctx, 182, -84, 13);
-      ctx.rect(0, -30, 60, 30);
-    },
-  },
-  kremlin: {        // стена, Спасская башня, колокольня Ивана Великого
-    w: 300,
-    draw(ctx) {
-      ctx.rect(0, -40, 300, 40);
-      for (let x = 2; x < 298; x += 11) ctx.rect(x, -47, 6, 7);
-      ctx.rect(120, -92, 34, 92); ctx.rect(125, -122, 24, 30);
-      poly(ctx, [125, -122, 149, -122, 137, -172]);
-      poly(ctx, [137, -184, 141, -176, 137, -170, 133, -176]);
-      ctx.rect(30, -70, 22, 70); poly(ctx, [29, -70, 53, -70, 41, -106]);
-      ctx.rect(244, -64, 20, 64); poly(ctx, [243, -64, 265, -64, 254, -96]);
-      ctx.rect(190, -128, 14, 128); dot(ctx, 197, -135, 9); ctx.rect(196.2, -156, 1.6, 14);
-    },
-  },
-  basil: {          // купола собора Василия Блаженного
-    w: 110,
-    draw(ctx) {
-      ctx.rect(4, -40, 102, 40);
-      poly(ctx, [44, 0, 44, -82, 55, -132, 66, -82, 66, 0]);
-      dot(ctx, 55, -138, 5); ctx.rect(54.3, -152, 1.4, 10);
-      for (const [x, h] of [[8, 58], [26, 74], [70, 74], [88, 58]]) {
-        ctx.rect(x, -h, 14, h);
-        dot(ctx, x + 7, -h - 8, 9.5);
-        poly(ctx, [x + 2, -h - 14, x + 12, -h - 14, x + 7, -h - 27]);
-      }
-    },
-  },
-  hhs: {            // Храм Христа Спасителя
-    w: 170, scale: 1.15,
-    draw(ctx) {
-      ctx.rect(22, -70, 126, 70);
-      ctx.rect(58, -104, 54, 34);
-      ctx.moveTo(115, -104); ctx.arc(85, -104, 30, 0, Math.PI, true); ctx.closePath();
-      poly(ctx, [78, -132, 92, -132, 85, -150]);
-      ctx.rect(84, -164, 2, 14); ctx.rect(81, -160, 8, 2);
-      for (const x of [18, 128]) { ctx.rect(x, -92, 24, 22); dot(ctx, x + 12, -96, 11.5); ctx.rect(x + 11.2, -116, 1.6, 10); }
-    },
-  },
-  shater: {         // шатровая церковь в Коломенском
-    w: 60,
-    draw(ctx) {
-      ctx.rect(0, -30, 60, 30);
-      poly(ctx, [14, 0, 14, -72, 20, -80, 30, -172, 40, -80, 46, -72, 46, 0]);
-      ctx.rect(29.2, -186, 1.6, 14); ctx.rect(26.5, -182, 7, 1.6);
-    },
-  },
-  luzhniki: {       // чаша стадиона
-    w: 240,
-    draw(ctx) {
-      poly(ctx, [0, 0, 8, -34, 40, -48, 200, -48, 232, -34, 240, 0]);
-      for (const x of [30, 210]) { ctx.rect(x, -92, 2.4, 46); ctx.rect(x - 7, -96, 16, 6); }
-    },
-  },
-  rechnoy: {        // Северный речной вокзал со шпилем
-    w: 200,
-    draw(ctx) {
-      ctx.rect(0, -30, 200, 30);
-      ctx.rect(70, -46, 60, 16);
-      ctx.rect(88, -78, 24, 34);
-      poly(ctx, [94, -78, 106, -78, 100, -156]);
-      poly(ctx, [100, -168, 104, -160, 100, -154, 96, -160]);
-    },
-  },
-  ferris: {         // колесо обозрения
-    w: 150, own: true,
-    draw(ctx, it, color) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.arc(75, -88, 70, 0, TAU); ctx.stroke();
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; ctx.moveTo(75, -88); ctx.lineTo(75 + Math.cos(a) * 70, -88 + Math.sin(a) * 70); }
-      ctx.stroke();
-      ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.moveTo(75, -88); ctx.lineTo(44, 0); ctx.moveTo(75, -88); ctx.lineTo(106, 0); ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; dot(ctx, 75 + Math.cos(a) * 70, -88 + Math.sin(a) * 70, 5); }
-      ctx.fill();
-    },
-  },
-};
+const { TAU, clamp, lerp, fmt, makeRng, hash3, mix, shade, poly } = K.util;
+const CONFIG = K.CONFIG, FONT = K.FONT, C = CONFIG.colors, ink = K.ink;
+const { FarArt, BackArt, STYLES, SPECIAL, PropArt, ForeArt, drawFacade, drawTraffic, fr, fp } = K.CityArt;
+const T = ink.text;
+const LIT = '#F3DF9A';
 
 /* Пересчёт весов района: «громкое» встречается реже, обычное занимает освободившееся место.
    k(id) — какую долю от прежней оставить (1 — не трогать). */
@@ -213,1261 +34,12 @@ function rebalance(list, k) {
   return list.map(([id, w], i) => [id, keep[i] === 1 ? w * grow : w * keep[i]]);
 }
 
-/* ───────────────────────────── СРЕДНИЙ ПЛАН: ДОМА ЦЕЛИКОМ ─────────────────────────────
-   Рисуются один раз во внеэкранный холст. Начало координат — левый нижний угол. */
-function winGrid(k, b, x, top, w, h, cw, ch, gx, gy, litPct) {
-  const cols = Math.max(1, Math.floor((w + gx) / (cw + gx))), rows = Math.max(1, Math.floor((h + gy) / (ch + gy)));
-  const ox = x + (w - (cols * (cw + gx) - gx)) / 2;
-  const pct = litPct === undefined ? b.litPct : litPct, lit = [];
-  k.fillStyle = b.win;
-  k.beginPath();
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const wx = ox + c * (cw + gx), wy = top + r * (ch + gy);
-      if (hash3(b.seed, r, c) % 100 < pct) lit.push(wx, wy);
-      else k.rect(wx, wy, cw, ch);
-    }
-  }
-  k.fill();
-  if (lit.length) {
-    k.fillStyle = b.lit;
-    k.beginPath();
-    for (let i = 0; i < lit.length; i += 2) k.rect(lit[i], lit[i + 1], cw, ch);
-    k.fill();
-  }
-}
-
-const BackArt = {
-  panel: {
-    dims: r => ({ w: r.range(110, 170), h: r.range(0.42, 0.62), extra: 24 }),
-    draw(k, b) {
-      k.fillStyle = b.body;
-      k.fillRect(0, -b.h, b.w, b.h);
-      k.fillRect(b.w * 0.14, -b.h - 7, 18, 7);
-      k.fillRect(b.w * 0.62, -b.h - 5, 24, 5);
-      k.fillRect(b.w * 0.62 + 11, -b.h - 22, 1.6, 17);
-      winGrid(k, b, 9, -b.h + 11, b.w - 18, b.h - 20, 7, 8, 6, 8);
-    },
-  },
-  panelTall: {
-    dims: r => ({ w: r.range(76, 104), h: r.range(0.62, 0.84), extra: 24 }),
-    draw(k, b) { BackArt.panel.draw(k, b); },
-  },
-  khrush: {
-    dims: r => ({ w: r.range(170, 250), h: r.range(0.2, 0.26), extra: 12, minH: 66 }),
-    draw(k, b) {
-      k.fillStyle = b.body;
-      k.fillRect(0, -b.h, b.w, b.h);
-      k.beginPath();
-      poly(k, [-3, -b.h, 8, -b.h - 9, b.w - 8, -b.h - 9, b.w + 3, -b.h]);
-      k.fill();
-      winGrid(k, b, 10, -b.h + 9, b.w - 20, b.h - 26, 8, 8, 9, 7);
-      k.fillStyle = b.win;
-      for (let x = 24; x < b.w - 20; x += 62) k.fillRect(x, -13, 9, 13);
-    },
-  },
-  tower: {
-    dims: r => ({ w: r.range(70, 100), h: r.range(0.7, 1), extra: 34 }),
-    draw(k, b) {
-      k.fillStyle = b.body;
-      k.fillRect(0, -b.h, b.w, b.h);
-      k.fillRect(b.w * 0.25, -b.h - 10, b.w * 0.5, 10);
-      k.fillRect(b.w / 2 - 1, -b.h - 32, 2, 22);
-      winGrid(k, b, 7, -b.h + 9, b.w - 14, b.h - 16, 5, 9, 4, 6);
-    },
-  },
-  site: {       // стройка с краном
-    dims: r => ({ w: r.range(96, 124), h: r.range(0.45, 0.68), extra: 70 }),
-    draw(k, b) {
-      const solid = b.h * 0.55;
-      k.fillStyle = b.body;
-      k.fillRect(0, -solid, b.w, solid);
-      winGrid(k, b, 8, -solid + 9, b.w - 16, solid - 14, 7, 8, 6, 8, 0);
-      for (let y = -solid; y > -b.h; y -= 16) k.fillRect(0, y - 2.5, b.w, 2.5);
-      for (let x = 0; x <= b.w - 3; x += (b.w - 3) / 4) k.fillRect(x, -b.h, 3, b.h - solid);
-      const mx = b.w * 0.72;
-      k.fillRect(mx, -b.h - 62, 3.5, b.h + 62);
-      k.fillRect(b.w * 0.06, -b.h - 60, b.w * 0.94, 3);
-      k.fillRect(mx + 8, -b.h - 60, 14, 11);
-      k.fillRect(b.w * 0.2, -b.h - 57, 1.2, 30);
-      k.fillRect(b.w * 0.2 - 4, -b.h - 28, 9, 6);
-    },
-  },
-  stalin: {     // сталинская высотка
-    dims: r => ({ w: r.range(124, 156), h: r.range(0.62, 0.78), extra: 0, spire: 0.32 }),
-    draw(k, b) {
-      const t1 = b.h * 0.56, t2 = b.h * 0.26, t3 = b.h * 0.18, top = t1 + t2 + t3;
-      k.fillStyle = b.body;
-      k.fillRect(0, -t1, b.w, t1);
-      k.fillRect(b.w * 0.2, -t1 - t2, b.w * 0.6, t2);
-      k.fillRect(b.w * 0.34, -top, b.w * 0.32, t3);
-      k.fillRect(2, -t1 - 14, 12, 14);
-      k.fillRect(b.w - 14, -t1 - 14, 12, 14);
-      k.beginPath();
-      poly(k, [b.w * 0.42, -top, b.w * 0.58, -top, b.w * 0.5, -top - b.h * 0.26]);
-      k.fill();
-      k.fillRect(b.w / 2 - 1, -top - b.h * 0.3, 2, b.h * 0.1);
-      winGrid(k, b, 8, -t1 + 10, b.w - 16, t1 - 16, 6, 9, 6, 7);
-      winGrid(k, b, b.w * 0.2 + 7, -t1 - t2 + 8, b.w * 0.6 - 14, t2 - 10, 6, 9, 6, 7);
-      winGrid(k, b, b.w * 0.34 + 6, -top + 7, b.w * 0.32 - 12, t3 - 9, 5, 8, 5, 6);
-    },
-  },
-  old: {        // старый дом с мансардой
-    dims: r => ({ w: r.range(124, 190), h: r.range(0.28, 0.4), extra: 30, minH: 84 }),
-    draw(k, b) {
-      k.fillStyle = b.dark;
-      k.beginPath();
-      poly(k, [0, -b.h, 9, -b.h - 15, b.w - 9, -b.h - 15, b.w, -b.h]);
-      k.fill();
-      k.fillRect(b.w * 0.2, -b.h - 25, 8, 12);
-      k.fillRect(b.w * 0.7, -b.h - 23, 8, 10);
-      k.fillStyle = b.body;
-      k.fillRect(0, -b.h, b.w, b.h);
-      k.fillStyle = b.dark;
-      k.fillRect(-2, -b.h - 1, b.w + 4, 3.5);
-      k.fillRect(0, -26, b.w, 2);
-      winGrid(k, b, 10, -b.h + 11, b.w - 20, b.h - 42, 6, 12, 9, 9);
-      k.fillStyle = b.win;
-      for (let x = 12; x < b.w - 16; x += 22) { k.beginPath(); k.arc(x + 5, -14, 5, Math.PI, 0); k.rect(x, -14, 10, 14); k.fill(); }
-    },
-  },
-  glass: {      // стеклянная башня
-    dims: r => ({ w: r.range(64, 96), h: r.range(0.76, 1.05), extra: 30 }),
-    draw(k, b) {
-      const slant = 22 * (b.seed % 2 ? 1 : -1);
-      const yl = -b.h + Math.max(0, slant), yr = -b.h + Math.max(0, -slant);
-      k.fillStyle = b.body;
-      k.beginPath();
-      poly(k, [0, 0, 0, yl, b.w, yr, b.w, 0]);
-      k.fill();
-      k.fillRect(b.w * (slant > 0 ? 0.82 : 0.14), -b.h - 26, 1.8, 28);
-      k.fillStyle = b.win;
-      k.beginPath();
-      for (let y = -b.h + 34; y < -8; y += 9) k.rect(5, y, b.w - 10, 4);
-      k.fill();
-    },
-  },
-  cityTower: {  // башни Сити вблизи: уходят за верх экрана
-    dims: r => ({ w: r.range(90, 140), h: r.range(1.25, 2.1), extra: 40 }),
-    draw(k, b) {
-      const kind = b.seed % 3;
-      k.fillStyle = b.body;
-      k.beginPath();
-      if (kind === 0) poly(k, [0, 0, 0, -b.h + 50, b.w, -b.h, b.w, 0]);
-      else if (kind === 1) poly(k, [6, 0, 0, -b.h * 0.5, 8, -b.h, b.w - 8, -b.h, b.w, -b.h * 0.5, b.w - 6, 0]);
-      else { k.rect(0, -b.h * 0.72, b.w, b.h * 0.72); k.rect(b.w * 0.14, -b.h * 0.88, b.w * 0.72, b.h * 0.2); k.rect(b.w * 0.3, -b.h, b.w * 0.4, b.h * 0.14); }
-      k.fill();
-      k.fillStyle = b.win;
-      k.beginPath();
-      for (let y = -b.h + 20; y < -10; y += 11) k.rect(kind === 1 ? 9 : 5, y, b.w - (kind === 1 ? 18 : 10), 5);
-      k.fill();
-      k.fillStyle = b.body;
-      for (let x = b.w * 0.25; x < b.w; x += b.w * 0.25) k.fillRect(x - 1, -b.h, 2, b.h);
-    },
-  },
-  newblock: {   // новый жилой комплекс
-    dims: r => ({ w: r.range(96, 150), h: r.range(0.6, 0.95), extra: 20 }),
-    draw(k, b) {
-      k.fillStyle = b.body;
-      k.fillRect(0, -b.h, b.w * 0.62, b.h);
-      k.fillRect(b.w * 0.62, -b.h * 0.82, b.w * 0.38, b.h * 0.82);
-      k.fillStyle = b.accent;
-      k.fillRect(b.w * 0.26, -b.h, 7, b.h);
-      k.fillRect(b.w * 0.8, -b.h * 0.82, 6, b.h * 0.82);
-      k.fillStyle = b.body;
-      k.fillRect(b.w * 0.1, -b.h - 8, 20, 8);
-      winGrid(k, b, 7, -b.h + 10, b.w * 0.62 - 14, b.h - 18, 8, 9, 5, 7);
-      winGrid(k, b, b.w * 0.62 + 6, -b.h * 0.82 + 10, b.w * 0.38 - 12, b.h * 0.82 - 18, 8, 9, 5, 7);
-    },
-  },
-  factory: {    // промзона: шедовая крыша, труба и буквы на корпусе
-    dims: r => ({ w: r.range(200, 280), h: r.range(0.24, 0.32), extra: 110, minH: 76 }),
-    draw(k, b) {
-      k.fillStyle = b.body;
-      k.fillRect(0, -b.h, b.w, b.h);
-      k.beginPath();
-      for (let x = 0; x < b.w - 20; x += 34) poly(k, [x, -b.h, x, -b.h - 16, x + 34, -b.h]);
-      k.fill();
-      k.beginPath();
-      poly(k, [b.w * 0.8, -b.h, b.w * 0.8 + 4, -b.h - 100, b.w * 0.8 + 13, -b.h - 100, b.w * 0.8 + 17, -b.h]);
-      k.fill();
-      k.fillStyle = b.dark;
-      k.fillRect(b.w * 0.8 + 4.5, -b.h - 92, 8, 6);
-      k.fillRect(b.w * 0.8 + 5.2, -b.h - 76, 6.6, 6);
-      winGrid(k, b, 10, -b.h + 12, b.w - 20, b.h - 36, 16, 12, 6, 8, 4);
-      if (b.seed % 2 === 0) { k.fillStyle = b.dark; k.fillRect(b.w * 0.16, -b.h + 8, b.w * 0.44, 15); text(k, 'МОСКВИЧ', b.w * 0.38, -b.h + 16, b.w * 0.4, 10, b.body); }
-    },
-  },
-  pavilionBack: {   // павильон ВДНХ: колоннада, ярусы, шпиль со звездой
-    place: true,
-    dims: r => ({ w: r.range(150, 200), h: r.range(0.36, 0.46), extra: 130, minH: 100 }),
-    draw(k, b) {
-      k.fillStyle = b.body;
-      k.fillRect(0, -b.h * 0.7, b.w, b.h * 0.7);
-      k.fillRect(b.w * 0.16, -b.h, b.w * 0.68, b.h * 0.34);
-      k.fillRect(b.w * 0.34, -b.h - 30, b.w * 0.32, 32);
-      k.fillRect(b.w * 0.43, -b.h - 56, b.w * 0.14, 28);
-      k.beginPath();
-      poly(k, [b.w * 0.46, -b.h - 56, b.w * 0.54, -b.h - 56, b.w * 0.5, -b.h - 110]);
-      k.fill();
-      k.fillStyle = '#D9C27A';
-      k.beginPath();
-      poly(k, [b.w * 0.5, -b.h - 124, b.w * 0.5 + 5, -b.h - 113, b.w * 0.5, -b.h - 106, b.w * 0.5 - 5, -b.h - 113]);
-      k.fill();
-      k.fillStyle = b.win;
-      for (let x = 10; x < b.w - 10; x += 16) k.fillRect(x, -b.h * 0.62, 6, b.h * 0.62);
-      k.fillStyle = b.body;
-      k.fillRect(0, -10, b.w, 10);
-    },
-  },
-  church: {
-    place: true,
-    dims: r => ({ w: r.range(74, 100), h: r.range(0.26, 0.34), extra: 120, minH: 80 }),
-    draw(k, b) {
-      k.fillStyle = b.body;
-      k.fillRect(b.w * 0.2, -b.h, b.w * 0.8, b.h);
-      k.fillRect(b.w * 0.48, -b.h - 26, b.w * 0.3, 26);
-      k.fillRect(0, -b.h - 40, b.w * 0.26, b.h + 40);
-      k.beginPath();
-      poly(k, [0, -b.h - 40, b.w * 0.26, -b.h - 40, b.w * 0.13, -b.h - 84]);
-      k.fill();
-      k.fillStyle = '#D9C27A';
-      k.beginPath();
-      dot(k, b.w * 0.63, -b.h - 36, 13);
-      poly(k, [b.w * 0.63 - 6, -b.h - 45, b.w * 0.63 + 6, -b.h - 45, b.w * 0.63, -b.h - 62]);
-      k.fill();
-      k.fillRect(b.w * 0.63 - 0.8, -b.h - 74, 1.6, 13);
-      k.fillRect(b.w * 0.13 - 0.8, -b.h - 96, 1.6, 13);
-      k.fillStyle = b.win;
-      for (let x = b.w * 0.3; x < b.w - 12; x += 18) { k.beginPath(); k.arc(x + 4, -b.h * 0.5, 4, Math.PI, 0); k.rect(x, -b.h * 0.5, 8, 16); k.fill(); }
-    },
-  },
-};
-
-/* ───────────────────────────── ФАСАДЫ ─────────────────────────────
-   Ближний ряд домов в настоящем масштабе: первый этаж с магазинами и вывесками. */
-const STYLES = {
-  // ac — доля окон с кондиционером (%), pipes — водосточные трубы, brick — кирпичная кладка
-  panel:      { w: [230, 330], floors: [5, 7],  floorH: 60, groundH: 66,  bayW: 46, win: 'panel',  ground: 'plain', roof: 'flat', ac: 16 },
-  panelShop:  { w: [250, 340], floors: [5, 7],  floorH: 60, groundH: 96,  bayW: 46, win: 'panel',  ground: 'shop',  roof: 'flat', ac: 16 },
-  khrush:     { w: [250, 340], floors: [4, 4],  floorH: 56, groundH: 60,  bayW: 42, win: 'rect',   ground: 'plain', roof: 'hip', ac: 12, pipes: true, brick: true },
-  stalin:     { w: [240, 320], floors: [4, 6],  floorH: 72, groundH: 98,  bayW: 54, win: 'tall',   ground: 'rust',  roof: 'cornice', pilasters: true, ac: 7, pipes: true },
-  stalinShop: { w: [250, 330], floors: [4, 6],  floorH: 72, groundH: 104, bayW: 54, win: 'tall',   ground: 'shop',  roof: 'cornice', pilasters: true, ac: 7, pipes: true },
-  old:        { w: [190, 270], floors: [1, 3],  floorH: 80, groundH: 92,  bayW: 50, win: 'arched', ground: 'plain', roof: 'mansard', bands: true, pipes: true },
-  oldShop:    { w: [200, 280], floors: [1, 3],  floorH: 80, groundH: 104, bayW: 50, win: 'arched', ground: 'shop',  roof: 'mansard', bands: true, pipes: true },
-  glass:      { w: [210, 300], floors: [8, 12], floorH: 54, groundH: 112, bayW: 40, win: 'strip',  ground: 'lobby', roof: 'none' },
-  newbuild:   { w: [220, 300], floors: [6, 9],  floorH: 62, groundH: 86,  bayW: 50, win: 'modern', ground: 'plain', roof: 'flat' },
-  newShop:    { w: [230, 310], floors: [6, 9],  floorH: 62, groundH: 104, bayW: 50, win: 'modern', ground: 'shop',  roof: 'flat' },
-};
-
-function drawWindow(k, type, cx, y0, bw, fH, col, h, fl, b) {
-  const lit = h % 100 < 9;
-  const glass = lit ? col.lit : col.glass;
-  if (type === 'rect' || type === 'panel') {
-    const ww = bw * (type === 'panel' ? 0.56 : 0.5), wh = fH * 0.5, x = cx - ww / 2, y = y0 - fH * 0.24 - wh;
-    const balcony = type === 'panel' && (h >> 8) % 3 === 0;
-    if (balcony && (h >> 12) % 3) {                     // лоджия застеклена: каждый стеклил как мог
-      const tones = ['#F2F2EF', '#E6E1D6', '#DDE4E8'];
-      k.fillStyle = tones[(h >> 14) % 3];
-      k.fillRect(cx - bw * 0.44, y0 - fH * 0.86, bw * 0.88, fH * 0.7);
-      k.fillStyle = glass;
-      k.fillRect(cx - bw * 0.4, y0 - fH * 0.82, bw * 0.8, fH * 0.36);
-      k.fillStyle = tones[(h >> 14) % 3];
-      k.fillRect(cx - bw * 0.14, y0 - fH * 0.82, 1.6, fH * 0.36);
-      k.fillRect(cx + bw * 0.13, y0 - fH * 0.82, 1.6, fH * 0.36);
-      return;
-    }
-    k.fillStyle = glass;
-    k.fillRect(x, y, ww, wh);
-    k.fillStyle = col.wall;
-    k.fillRect(cx - 0.8, y, 1.6, wh);
-    if (balcony) {                                      // открытый балкон с ограждением
-      k.fillStyle = col.dark;
-      k.fillRect(cx - bw * 0.42, y0 - fH * 0.5, bw * 0.84, fH * 0.34);
-      k.fillStyle = col.trim;
-      k.fillRect(cx - bw * 0.42, y0 - fH * 0.5, bw * 0.84, 2.5);
-    }
-  } else if (type === 'tall') {
-    const ww = bw * 0.42, wh = fH * 0.62, x = cx - ww / 2, y = y0 - fH * 0.2 - wh;
-    k.fillStyle = col.trim;
-    k.fillRect(x - 3.5, y - 3.5, ww + 7, wh + 7);
-    k.fillRect(x - 6, y + wh + 2, ww + 12, 3.5);
-    k.fillStyle = glass;
-    k.fillRect(x, y, ww, wh);
-    k.fillStyle = col.trim;
-    k.fillRect(cx - 1, y, 2, wh);
-    k.fillRect(x, y + wh * 0.3, ww, 2);
-    if (fl === 1 && b % 3 === 1) {                      // балкон с балясинами
-      k.fillRect(x - 9, y + wh - 4, ww + 18, 4);
-      for (let bx = x - 8; bx < x + ww + 8; bx += 5) k.fillRect(bx, y + wh - 16, 2, 13);
-      k.fillRect(x - 9, y + wh - 18, ww + 18, 3);
-    }
-  } else if (type === 'arched') {
-    const ww = bw * 0.44, wh = fH * 0.46, x = cx - ww / 2, y = y0 - fH * 0.2 - wh;
-    k.fillStyle = col.trim;
-    k.beginPath(); k.arc(cx, y, ww / 2 + 4, Math.PI, 0); k.rect(x - 4, y, ww + 8, wh + 3); k.fill();
-    k.fillRect(x - 7, y + wh + 2, ww + 14, 3.5);
-    k.fillStyle = glass;
-    k.beginPath(); k.arc(cx, y, ww / 2, Math.PI, 0); k.rect(x, y, ww, wh); k.fill();
-    k.fillStyle = col.trim;
-    k.fillRect(cx - 1, y - ww / 2, 2, wh + ww / 2);
-    k.fillRect(x, y, ww, 2);
-  } else if (type === 'modern') {
-    const ww = bw * 0.6, wh = fH * 0.62, x = cx - ww / 2, y = y0 - fH * 0.18 - wh;
-    if ((h >> 6) % 4 === 0) { k.fillStyle = col.accent; k.fillRect(cx - bw / 2, y0 - fH, bw, fH); }
-    k.fillStyle = col.dark;
-    k.fillRect(x - 1.5, y - 1.5, ww + 3, wh + 3);
-    k.fillStyle = glass;
-    k.fillRect(x, y, ww, wh);
-    k.fillStyle = col.dark;
-    k.fillRect(x + ww * 0.62, y, 1.5, wh);
-  }
-}
-
-/* Что стоит в витрине: зависит от типа заведения */
-function shopWindow(k, cat, b, x, y, w, h, seed) {
-  if (w < 16) return;
-  const bg = b.bg, cx = x + w / 2;
-  if (cat === 'grocery') {
-    // жёлтые ценники и плакаты «акция»
-    const n = Math.max(1, Math.floor(w / 34));
-    for (let i = 0; i < n; i++) {
-      const px = x + (i + 0.5) * w / n - 12, yellow = (seed + i) % 2 === 0;
-      k.fillStyle = yellow ? '#FFD400' : bg;
-      k.fillRect(px, y + 6, 24, 30);
-      text(k, yellow ? '−30%' : 'АКЦИЯ', px + 12, y + 17, 20, yellow ? 8 : 5.6, yellow ? '#D7141A' : b.fg, 900, K.SIGN_FONT.mont);
-      k.fillStyle = yellow ? '#1C1C1C' : b.fg;
-      k.fillRect(px + 4, y + 26, 16, 1.6);
-      k.fillRect(px + 6, y + 30, 12, 1.6);
-    }
-    k.fillStyle = bg;
-    k.fillRect(x, y + h - 10, w, 10);
-  } else if (cat === 'alcohol') {
-    // окна заклеены плёнкой с бутылками
-    k.fillStyle = bg;
-    k.fillRect(x, y, w, h);
-    k.fillStyle = 'rgba(255,255,255,.9)';
-    for (let bx = x + 9; bx < x + w - 8; bx += 15) { k.fillRect(bx, y + h - 34, 7, 26); k.fillRect(bx + 2, y + h - 44, 3, 11); }
-  } else if (cat === 'pvz') {
-    K.sign(k, b.name, cx - Math.min(w * 0.42, 30), y + 8, Math.min(w * 0.84, 60), 16, { radius: 3 });
-    text(k, 'ПУНКТ ВЫДАЧИ', cx, y + 33, w - 6, 5.6, '#4A4A4A', 800, FONT.text);
-    k.fillStyle = bg;
-    k.fillRect(x, y + h - 8, w, 8);
-  } else if (cat === 'cafe' || cat === 'fastfood') {
-    // столик у окна и меню
-    k.fillStyle = 'rgba(60,45,35,.55)';
-    k.fillRect(cx - 9, y + h - 20, 18, 2.4);
-    k.fillRect(cx - 1.2, y + h - 20, 2.4, 20);
-    k.beginPath(); dot(k, cx - 16, y + h - 24, 4.4); dot(k, cx + 16, y + h - 24, 4.4); k.fill();
-    k.fillRect(cx - 20, y + h - 20, 8, 20);
-    k.fillRect(cx + 12, y + h - 20, 8, 20);
-    if (w > 46) { k.fillStyle = '#2B2B2B'; k.fillRect(x + 4, y + 6, 16, 22); k.fillStyle = '#EDEDED'; for (let i = 0; i < 4; i++) k.fillRect(x + 6, y + 9 + i * 5, 12 - (i % 2) * 4, 1.4); }
-  } else if (cat === 'bank') {
-    // банкомат
-    const ax = x + (seed % 2 ? 4 : w - 30);
-    k.fillStyle = '#3B4048';
-    k.fillRect(ax, y + h - 50, 26, 50);
-    k.fillStyle = '#BFE3F5';
-    k.fillRect(ax + 4, y + h - 45, 18, 13);
-    k.fillStyle = '#9AA1AA';
-    k.fillRect(ax + 4, y + h - 28, 18, 9);
-    k.fillStyle = bg === '#FFFFFF' ? b.fg : bg;
-    k.fillRect(ax, y + h - 54, 26, 5);
-    text(k, '24', ax + 13, y + h - 12, 20, 6.5, '#EDEDED', 900, K.SIGN_FONT.mont);
-  } else if (cat === 'pharmacy') {
-    // зелёный крест и полки с коробочками
-    k.fillStyle = '#00A651';
-    k.fillRect(x + 4, y + 5, 20, 20);
-    k.fillStyle = '#FFFFFF';
-    k.fillRect(x + 11.5, y + 8, 5, 14);
-    k.fillRect(x + 7, y + 12.5, 14, 5);
-    for (let sy = y + 30; sy < y + h - 6; sy += 13) {
-      k.fillStyle = '#FFFFFF';
-      k.fillRect(x + 3, sy + 9, w - 6, 1.6);
-      for (let i = 0, bx = x + 5; bx < x + w - 10; i++, bx += 9) { k.fillStyle = ['#7FC8A9', '#F2B5A7', '#F6E08A', '#A9C7F2'][(seed + i) % 4]; k.fillRect(bx, sy + 1, 7, 8); }
-    }
-  } else if (cat === 'realty') {
-    // объявления, наклеенные прямо на стекло
-    const cols = Math.max(1, Math.floor((w - 6) / 15));
-    for (let r = 0; r < 3; r++) for (let c = 0; c < cols; c++) {
-      const px = x + 4 + c * ((w - 8) / cols), py = y + 6 + r * 19;
-      k.fillStyle = '#FFFFFF';
-      k.fillRect(px, py, 12, 16);
-      k.fillStyle = (seed + r + c) % 4 === 0 ? '#E0443A' : '#9AA1AA';
-      k.fillRect(px + 2, py + 2, 8, 5);
-      k.fillStyle = '#9AA1AA';
-      k.fillRect(px + 2, py + 9, 8, 1.2);
-      k.fillRect(px + 2, py + 12, 5, 1.2);
-    }
-  } else if (cat === 'telecom') {
-    // телефоны на плакатах
-    for (let i = 0, px = x + 6; px < x + w - 14; i++, px += 20) {
-      rr(k, px, y + 8, 13, 26, 2.5); k.fillStyle = '#2B2B2B'; k.fill();
-      k.fillStyle = i % 2 ? bg : '#BFE3F5';
-      k.fillRect(px + 1.6, y + 10.5, 9.8, 19);
-    }
-    k.fillStyle = bg;
-    k.fillRect(x, y + h - 9, w, 9);
-  } else if (cat === 'developer') {
-    // макет жилого комплекса
-    k.fillStyle = '#FFFFFF';
-    k.fillRect(cx - 22, y + h - 16, 44, 4);
-    k.fillRect(cx - 18, y + h - 40, 10, 24);
-    k.fillRect(cx - 5, y + h - 52, 10, 36);
-    k.fillRect(cx + 8, y + h - 32, 10, 16);
-    text(k, 'ОФИС ПРОДАЖ', cx, y + 9, w - 6, 5.6, '#4A4A4A', 800, FONT.text);
-  } else {
-    // обычный магазин: полки с товаром
-    for (let sy = y + 8; sy < y + h - 6; sy += 17) {
-      k.fillStyle = 'rgba(255,255,255,.8)';
-      k.fillRect(x + 3, sy + 12, w - 6, 1.8);
-      for (let i = 0, bx = x + 5; bx < x + w - 10; i++, bx += 10) {
-        k.fillStyle = [bg, '#F2D7A0', '#D9D9D9', '#F2B5A7'][(seed + i + sy) % 4 | 0];
-        const hh = 6 + ((seed + i) % 3) * 2;
-        k.fillRect(bx, sy + 12 - hh, 7, hh);
-      }
-    }
-  }
-}
-
-/* Один магазин на первом этаже: вывеска в фирменном стиле, витрина, дверь */
-function shopUnit(k, x, w, gH, name, col, seed) {
-  const b = K.BRANDS[name] || { name, cat: 'retail', bg: '#FFFFFF', fg: '#1C1C1C' };
-  const cat = b.cat, top = -gH;
-  const fh = Math.min(30, Math.max(22, w * 0.19));                  // высота вывески
-  const gx = x + 6, gw = w - 12, gTop = top + fh + 10, gh = -9 - gTop;
-  const tinted = cat === 'grocery' || cat === 'alcohol' || cat === 'pvz' || cat === 'fastfood' || cat === 'pharmacy';
-  const frame = tinted && b.bg !== '#FFFFFF' ? mix(b.bg, '#2F2F2F', 0.45) : '#4F555C';
-
-  // стекло с бликом
-  k.fillStyle = col.glass;
-  k.fillRect(gx, gTop, gw, gh);
-  k.fillStyle = 'rgba(255,255,255,.22)';
-  k.beginPath(); poly(k, [gx + gw * 0.12, gTop, gx + gw * 0.3, gTop, gx + gw * 0.1, gTop + gh, gx, gTop + gh, gx, gTop + gh * 0.5]); k.fill();
-
-  // дверь: у супермаркета — раздвижная по центру, у остальных — сбоку
-  const dw = Math.min(cat === 'grocery' ? 46 : 36, gw * 0.46), dh = Math.min(66, gh - 3);
-  const center = cat === 'grocery' || cat === 'fastfood';
-  const dx = center ? gx + gw / 2 - dw / 2 : (seed % 2 ? gx + 4 : gx + gw - dw - 4);
-
-  shopWindow(k, cat, b, gx, gTop, dx - gx - 3, gh, seed);
-  shopWindow(k, cat, b, dx + dw + 3, gTop, gx + gw - dx - dw - 3, gh, seed + 3);
-
-  // рамы
-  k.fillStyle = frame;
-  k.fillRect(gx - 2, gTop - 2, gw + 4, 2.5);
-  k.fillRect(gx - 2, gTop - 2, 2.5, gh + 2);
-  k.fillRect(gx + gw - 0.5, gTop - 2, 2.5, gh + 2);
-  k.fillRect(dx - 3, -9 - dh - 3, dw + 6, dh + 3);
-  k.fillStyle = mix(col.glass, '#FFFFFF', 0.35);
-  k.fillRect(dx, -9 - dh, dw, dh);
-  k.fillStyle = frame;
-  if (center) k.fillRect(dx + dw / 2 - 1, -9 - dh, 2, dh);
-  else k.fillRect(dx + (seed % 2 ? dw - 6 : 3), -9 - dh * 0.55, 2.5, 12);
-  if (cat === 'cafe') {                                             // маркиза в фирменный цвет
-    k.fillStyle = b.bg === '#FFFFFF' ? b.fg : b.bg;
-    k.beginPath(); poly(k, [gx - 3, gTop - 2, gx + gw + 3, gTop - 2, gx + gw + 7, gTop + 9, gx - 7, gTop + 9]); k.fill();
-    k.fillStyle = 'rgba(255,255,255,.4)';
-    for (let sx = gx; sx < gx + gw; sx += 16) k.fillRect(sx, gTop - 2, 8, 11);
-  }
-
-  // цоколь и ступенька
-  k.fillStyle = col.dark;
-  k.fillRect(x, -9, w, 9);
-  k.fillStyle = col.trim;
-  k.fillRect(dx - 6, -5, dw + 12, 5);
-
-  K.fascia(k, name, x + 2, top + 5, w - 4, fh);
-}
-
-function drawGroundFloor(k, f, bays, bw, pad) {
-  const st = f.style, col = f.col, W = f.w, gH = st.groundH;
-  if (st.ground === 'shop') {
-    // заведения занимают часть первого этажа, остальное — обычные окна и подъезд
-    k.fillStyle = col.base;
-    k.fillRect(0, -gH, W, gH);
-    if (st.pilasters) { k.fillStyle = col.dark; for (let y = -gH + 14; y < -6; y += 14) k.fillRect(0, y, W, 1.4); }
-    k.fillStyle = col.dark;
-    k.fillRect(0, -9, W, 9);
-    const x0 = f.shopX, x1 = x0 + f.units.reduce((sum, u) => sum + u.w + 5, -5);
-    const free = [];
-    for (let b = 0; b < bays; b++) { const cx = pad + (b + 0.5) * bw; if (cx + bw * 0.4 < x0 || cx - bw * 0.4 > x1) free.push(cx); }
-    const door = free.length > 1 ? free[x0 > W - x1 ? free.length - 2 : 1] : 0;      // подъезд — через окно от магазина
-    for (const cx of free) {
-      if (cx === door) {
-        k.fillStyle = col.dark;
-        k.fillRect(cx - 13, -58, 26, 58);
-        k.fillRect(cx - 20, -64, 40, 5);
-        k.fillStyle = col.glass;
-        k.fillRect(cx - 9, -54, 18, 22);
-      } else {
-        const ww = bw * 0.5, wh = gH * 0.44, wy = -(gH - 16);
-        if (st.pilasters || st.bands) { k.fillStyle = col.trim; k.fillRect(cx - ww / 2 - 3, wy - 3, ww + 6, wh + 6); }
-        k.fillStyle = col.glass;
-        k.fillRect(cx - ww / 2, wy, ww, wh);
-      }
-    }
-    let x = x0;
-    for (const u of f.units) { shopUnit(k, x, u.w, gH, u.name, col, f.seed + Math.round(x)); x += u.w + 5; }
-  } else if (st.ground === 'rust') {
-    k.fillStyle = col.base;
-    k.fillRect(0, -gH, W, gH);
-    k.fillStyle = col.dark;
-    for (let y = -gH + 14; y < -6; y += 14) k.fillRect(0, y, W, 1.4);
-    const arch = f.seed % 5 < 3;
-    for (let b = 0; b < bays; b++) {
-      const cx = pad + (b + 0.5) * bw;
-      if (arch && b === Math.floor(bays / 2)) {       // арка во двор
-        k.fillStyle = col.deep;
-        k.beginPath(); k.arc(cx, -52, 30, Math.PI, 0); k.rect(cx - 30, -52, 60, 52); k.fill();
-        k.fillStyle = col.dark;
-        for (let x = cx - 24; x <= cx + 24; x += 8) k.fillRect(x - 0.8, -76, 1.6, 76);
-      } else {
-        k.fillStyle = col.trim;
-        k.fillRect(cx - bw * 0.23 - 3, -(gH - 20) - 3, bw * 0.46 + 6, gH * 0.5 + 6);
-        k.fillStyle = col.glass;
-        k.fillRect(cx - bw * 0.23, -(gH - 20), bw * 0.46, gH * 0.5);
-      }
-    }
-    k.fillStyle = col.dark;
-    k.fillRect(0, -9, W, 9);
-  } else if (st.ground === 'lobby') {
-    k.fillStyle = col.glass;
-    k.fillRect(0, -gH, W, gH);
-    k.fillStyle = col.trim;
-    for (let x = 0; x <= W; x += bw * 2) k.fillRect(x - 4, -gH, 8, gH);
-    k.fillRect(0, -gH, W, 7);
-    k.fillStyle = col.dark;
-    k.fillRect(W * 0.28, -72, W * 0.44, 6);
-    k.fillRect(W * 0.42, -66, W * 0.16, 66);
-    k.fillStyle = col.glass;
-    k.fillRect(W * 0.42 + 4, -62, W * 0.16 - 8, 56);
-    k.fillStyle = col.dark;
-    k.fillRect(0, -7, W, 7);
-    if (f.brands.length) K.sign(k, f.brands[0], W * 0.5 - 64, -(gH - 14), 128, 27, { radius: 3 });
-  } else {
-    k.fillStyle = col.base;
-    k.fillRect(0, -gH, W, gH);
-    for (let b = 0; b < bays; b++) {
-      const cx = pad + (b + 0.5) * bw;
-      if (b % 3 === 1) {                               // подъезд с козырьком
-        k.fillStyle = col.dark;
-        k.fillRect(cx - 13, -56, 26, 56);
-        k.fillRect(cx - 20, -62, 40, 5);
-        k.fillStyle = col.glass;
-        k.fillRect(cx - 9, -52, 18, 22);
-      } else {
-        k.fillStyle = col.glass;
-        k.fillRect(cx - bw * 0.26, -(gH - 14), bw * 0.52, gH * 0.42);
-      }
-    }
-    k.fillStyle = col.dark;
-    k.fillRect(0, -10, W, 10);
-  }
-}
-
-function drawRoof(k, f, top) {
-  const st = f.style, col = f.col, W = f.w;
-  if (st.roof === 'flat') {
-    k.fillStyle = col.trim;
-    k.fillRect(-2, top - 6, W + 4, 6);
-    k.fillStyle = col.wall;
-    k.fillRect(W * 0.2, top - 20, 26, 14);
-  } else if (st.roof === 'hip') {
-    k.fillStyle = col.roof;
-    k.beginPath(); poly(k, [-4, top, 10, top - 16, W - 10, top - 16, W + 4, top]); k.fill();
-  } else if (st.roof === 'cornice') {
-    k.fillStyle = col.trim;
-    k.fillRect(-5, top - 9, W + 10, 9);
-    k.fillStyle = col.wall;
-    k.fillRect(8, top - 24, W - 16, 15);
-  } else if (st.roof === 'mansard') {
-    k.fillStyle = col.roof;
-    k.beginPath(); poly(k, [0, top, 9, top - 32, W - 9, top - 32, W, top]); k.fill();
-    k.fillRect(W * 0.22, top - 46, 10, 16);
-    k.fillStyle = col.trim;
-    k.fillRect(-3, top - 4, W + 6, 5);
-    for (let x = 34; x < W - 40; x += 62) { k.fillStyle = col.trim; k.fillRect(x - 2, top - 26, 22, 22); k.fillStyle = col.glass; k.fillRect(x + 1, top - 23, 16, 17); }
-  }
-}
-
-function drawFacade(k, f) {
-  const st = f.style, W = f.w, col = f.col, gH = st.groundH, fH = st.floorH, floors = f.floors;
-  const top = -(gH + floors * fH);
-  k.fillStyle = col.wall;
-  k.fillRect(0, top, W, -top);
-  const pad = 14, bays = Math.max(2, Math.round((W - pad * 2) / st.bayW)), bw = (W - pad * 2) / bays;
-
-  for (let fl = 0; fl < floors; fl++) {
-    const y0 = -(gH + fl * fH);
-    if (st.win === 'strip') {                           // стеклянный пояс на весь этаж
-      k.fillStyle = (hash3(f.seed, fl, 5) % 100 < 8) ? col.lit : col.glass;
-      k.fillRect(6, y0 - fH * 0.8, W - 12, fH * 0.6);
-      k.fillStyle = col.wall;
-      for (let x = pad; x < W - pad; x += bw / 2) k.fillRect(x, y0 - fH * 0.8, 1.6, fH * 0.6);
-    } else {
-      for (let b = 0; b < bays; b++) drawWindow(k, st.win, pad + (b + 0.5) * bw, y0, bw, fH, col, hash3(f.seed, fl, b), fl, b);
-    }
-    if (st.bands) { k.fillStyle = col.trim; k.fillRect(0, y0 - 3.5, W, 3.5); }
-    if (st.win === 'panel') { k.fillStyle = col.dark; k.fillRect(0, y0 - 1, W, 1); }
-  }
-  if (st.win === 'panel') { k.fillStyle = col.dark; for (let b = 0; b <= bays; b++) k.fillRect(pad + b * bw - 0.5, top, 1, -top - gH); }
-  if (st.pilasters) { k.fillStyle = col.trim; for (let b = 0; b <= bays; b += 2) k.fillRect(pad + b * bw - 3.5, top, 7, -top - gH); }
-  if (st.brick) {                                       // кирпичная кладка
-    k.fillStyle = 'rgba(0,0,0,.05)';
-    for (let y = top + 5; y < -gH; y += 5) k.fillRect(0, y, W, 1);
-  }
-  if (st.ac) {                                          // кондиционеры под окнами
-    for (let fl = 0; fl < floors; fl++) for (let b = 0; b < bays; b++) {
-      if (hash3(f.seed, fl + 40, b) % 100 >= st.ac) continue;
-      const ax = pad + (b + 0.5) * bw + bw * 0.14, ay = -(gH + fl * fH) - fH * 0.2;
-      k.fillStyle = '#ECEDEE';
-      k.fillRect(ax, ay, 13, 8.5);
-      k.fillStyle = '#BFC3C7';
-      k.beginPath(); k.arc(ax + 4.6, ay + 4.2, 2.9, 0, TAU); k.fill();
-      k.fillRect(ax + 9, ay + 2, 2.6, 1); k.fillRect(ax + 9, ay + 4, 2.6, 1);
-    }
-  }
-  if (st.pipes) {                                       // водосточные трубы
-    k.fillStyle = col.dark;
-    for (const px of [4, W - 8]) {
-      k.fillRect(px, top + 2, 3.2, -top - 12);
-      k.fillRect(px - 1.5, top, 6.2, 5);
-      k.fillRect(px - 0.8, -(gH + fH), 4.8, 2);
-      k.beginPath(); poly(k, [px, -10, px + 3.2, -10, px + 8, -4, px + 5, -4]); k.fill();
-    }
-  }
-  if (st.roof === 'cornice') {                          // кронштейны под карнизом
-    k.fillStyle = col.trim;
-    for (let x = 6; x < W - 6; x += 13) k.fillRect(x, top, 5, 5);
-  }
-  drawGroundFloor(k, f, bays, bw, pad);
-  drawRoof(k, f, top);
-
-  // табличка с названием улицы
-  if (f.plate) {
-    const y = -(gH + 16);
-    rr(k, 14, y, 86, 15, 3);
-    k.fillStyle = '#F4F6F8';
-    k.fill();
-    text(k, f.plate, 57, y + 8, 78, 7.5, '#5E6B78', 800, FONT.text);
-  }
-}
-
-/* Низкие и особые участки ближнего ряда. draw(k, f): начало координат — левый нижний угол */
-const SPECIAL = {
-  garages: {
-    w: [300, 380], h: 100,
-    draw(k, f) {
-      const n = Math.round(f.w / 60), gw = f.w / n, tones = ['#B9A99A', '#A9B5A6', '#B6B9BD', '#C2A593'];
-      for (let i = 0; i < n; i++) {
-        const x = i * gw, tone = tones[hash3(f.seed, i, 1) % tones.length];
-        k.fillStyle = tone;
-        k.fillRect(x, -80, gw - 2, 80);
-        k.fillStyle = shade(tone, -0.12);
-        k.fillRect(x + 6, -66, gw - 14, 66);
-        k.fillStyle = shade(tone, -0.2);
-        k.fillRect(x + gw / 2 - 1.5, -66, 1.5, 66);
-        k.fillRect(x - 2, -86, gw + 2, 7);
-        if (hash3(f.seed, i, 2) % 4 === 0) text(k, 'СДАМ', x + gw / 2, -36, gw - 20, 11, shade(tone, 0.5));
-        else text(k, String(100 + hash3(f.seed, i, 3) % 300), x + gw / 2, -56, gw - 20, 8, shade(tone, 0.35), 700, FONT.text);
-      }
-    },
-  },
-  fence: {      // бетонный забор промзоны
-    w: [280, 380], h: 110,
-    draw(k, f) {
-      const pw = 76, n = Math.ceil(f.w / pw);
-      for (let i = 0; i < n; i++) {
-        const x = i * pw;
-        k.fillStyle = '#C9C9C6';
-        k.fillRect(x, -84, pw - 3, 84);
-        k.strokeStyle = '#B4B4B0';
-        k.lineWidth = 2;
-        k.beginPath();
-        for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) {
-          const cx = x + 20 + c * 34, cy = -62 + r * 36;
-          k.moveTo(cx, cy - 14); k.lineTo(cx + 13, cy); k.lineTo(cx, cy + 14); k.lineTo(cx - 13, cy); k.closePath();
-        }
-        k.stroke();
-      }
-      k.strokeStyle = '#A9A9A5';
-      k.lineWidth = 1.5;
-      k.beginPath();
-      for (let x = 0; x < f.w; x += 12) { k.moveTo(x, -90); k.lineTo(x + 6, -96); k.lineTo(x + 12, -90); }
-      k.stroke();
-      if (f.ad) K.adSign(k, f.ad[0], f.ad[1], f.w * 0.28, -74, 150, 54);
-    },
-  },
-  stroyka: {    // строительный забор, за ним каркас будущего дома
-    w: [280, 360], h: 330,
-    draw(k, f) {
-      k.fillStyle = '#D2D5D8';
-      for (let x = 18; x < f.w - 10; x += 64) k.fillRect(x, -320, 9, 320);
-      for (let y = -90; y > -330; y -= 58) k.fillRect(8, y, f.w - 16, 8);
-      k.fillStyle = '#E2E4E6';
-      k.fillRect(26, -206, f.w * 0.5, 50);
-      const pw = 62, n = Math.ceil(f.w / pw);
-      for (let i = 0; i < n; i++) {
-        k.fillStyle = i % 2 ? '#A9C7B0' : '#F1F3F1';
-        k.fillRect(i * pw, -86, pw - 2, 86);
-      }
-      k.fillStyle = '#8FB39A';
-      k.fillRect(0, -90, f.w, 5);
-      if (f.ad) K.adSign(k, f.ad[0], f.ad[1], f.w * 0.14, -82, f.w * 0.72, 64);
-    },
-  },
-  parkFence: {  // ограда парка, за ней деревья
-    w: [300, 400], h: 260,
-    draw(k, f) {
-      for (let i = 0; i < 4; i++) {
-        const cx = 40 + i * (f.w - 80) / 3 + (hash3(f.seed, i, 1) % 30) - 15, top = 170 + hash3(f.seed, i, 2) % 60;
-        k.fillStyle = shade(f.col.leaf2, -0.08);
-        k.fillRect(cx - 5, -100, 10, 100);
-        k.fillStyle = i % 2 ? f.col.leaf : f.col.leaf2;
-        k.beginPath(); dot(k, cx, -top + 20, 52); dot(k, cx - 34, -top + 62, 40); dot(k, cx + 36, -top + 58, 42); k.fill();
-      }
-      if (f.seed % 3 === 0) {                           // местами вместо решётки — стриженая изгородь
-        k.fillStyle = shade(f.col.leaf2, -0.05);
-        rr(k, 0, -40, f.w, 46, 12); k.fill();
-        k.fillStyle = f.col.leaf;
-        for (let x = 14; x < f.w - 10; x += 34) { k.beginPath(); dot(k, x + (hash3(f.seed, x, 3) % 10), -38, 9); k.fill(); }
-        return;
-      }
-      k.fillStyle = '#C9CCC8';
-      for (let x = 0; x <= f.w; x += 100) k.fillRect(x - 7, -82, 14, 82);
-      k.fillStyle = '#9FA5A2';
-      k.fillRect(0, -70, f.w, 3);
-      k.fillRect(0, -16, f.w, 3);
-      for (let x = 6; x < f.w; x += 9) k.fillRect(x, -76, 1.8, 76);
-    },
-  },
-  pond: {       // Патриаршие: пруд, жёлтый павильон, деревья
-    w: [420, 460], h: 250,
-    draw(k, f) {
-      for (let i = 0; i < 5; i++) {
-        const cx = 30 + i * (f.w - 60) / 4, top = 190 + hash3(f.seed, i, 2) % 40;
-        k.fillStyle = shade(f.col.leaf2, -0.08);
-        k.fillRect(cx - 5, -120, 10, 120);
-        k.fillStyle = i % 2 ? f.col.leaf : f.col.leaf2;
-        k.beginPath(); dot(k, cx, -top + 20, 50); dot(k, cx - 32, -top + 58, 38); dot(k, cx + 34, -top + 56, 40); k.fill();
-      }
-      // павильон
-      const px = f.w * 0.52;
-      k.fillStyle = '#E9D79A';
-      k.fillRect(px, -150, 150, 110);
-      k.fillStyle = '#F7F1DC';
-      k.fillRect(px - 6, -156, 162, 9);
-      k.beginPath(); poly(k, [px + 30, -156, px + 75, -182, px + 120, -156]); k.fill();
-      for (let x = px + 10; x < px + 144; x += 22) k.fillRect(x, -147, 8, 107);
-      k.fillStyle = '#C9B46E';
-      for (let x = px + 22; x < px + 130; x += 22) { k.beginPath(); k.arc(x + 3, -96, 6, Math.PI, 0); k.rect(x - 3, -96, 12, 40); k.fill(); }
-      // вода и берег
-      k.fillStyle = '#C3D6DC';
-      k.fillRect(0, -62, f.w, 34);
-      k.fillStyle = 'rgba(255,255,255,.55)';
-      for (let i = 0; i < 7; i++) k.fillRect(20 + (hash3(f.seed, i, 5) % (f.w - 80)), -56 + (i % 3) * 9, 34, 1.6);
-      k.fillStyle = '#D9D4C5';
-      k.fillRect(0, -30, f.w, 30);
-      k.fillStyle = '#9FA5A2';
-      k.fillRect(0, -44, f.w, 2.5);
-      for (let x = 8; x < f.w; x += 16) k.fillRect(x, -44, 2, 16);
-    },
-  },
-  embankment: { // набережная: парапет, река, другой берег
-    w: [320, 420], h: 150, place: true,
-    draw(k, f) {
-      k.fillStyle = shade(f.col.far, -0.03);
-      for (let i = 0, x = 0; x < f.w; i++) { const w = 30 + hash3(f.seed, i, 1) % 40, h = 20 + hash3(f.seed, i, 2) % 36; k.fillRect(x, -112 - h, w, h); x += w + 4; }
-      k.fillStyle = '#C7D7DE';
-      k.fillRect(0, -112, f.w, 62);
-      k.fillStyle = 'rgba(255,255,255,.5)';
-      for (let i = 0; i < 9; i++) k.fillRect(10 + (hash3(f.seed, i, 5) % (f.w - 60)), -104 + (i % 5) * 11, 40, 1.6);
-      k.fillStyle = '#CFCFCB';
-      k.fillRect(0, -52, f.w, 52);
-      k.fillStyle = '#BDBDB8';
-      k.fillRect(0, -56, f.w, 6);
-      for (let x = 0; x < f.w; x += 70) k.fillRect(x, -62, 12, 62);
-    },
-  },
-  pavilion: {   // павильон ВДНХ вблизи
-    w: [300, 340], h: 330, place: true,
-    draw(k, f) {
-      const W = f.w;
-      k.fillStyle = '#EFEBDD';
-      k.fillRect(0, -190, W, 190);
-      k.fillStyle = '#E3DDCB';
-      k.fillRect(20, -168, W - 40, 150);
-      k.fillStyle = '#F8F5EA';
-      for (let x = 14; x < W - 20; x += (W - 46) / 7) { k.fillRect(x, -176, 18, 176); k.fillRect(x - 4, -182, 26, 8); k.fillRect(x - 3, -10, 24, 10); }
-      k.fillRect(-6, -206, W + 12, 22);
-      k.fillStyle = '#EFEBDD';
-      k.fillRect(W * 0.18, -246, W * 0.64, 42);
-      k.fillRect(W * 0.36, -280, W * 0.28, 36);
-      k.beginPath(); poly(k, [W * 0.46, -280, W * 0.54, -280, W * 0.5, -330]); k.fill();
-      k.fillStyle = '#D9C27A';
-      k.fillRect(W * 0.18, -206, W * 0.64, 4);
-      k.beginPath(); dot(k, W * 0.5, -224, 13); k.fill();
-      k.fillStyle = '#C8C2AE';
-      k.fillRect(W * 0.42, -110, W * 0.16, 110);
-    },
-  },
-  theatre: {    // театр с колоннами
-    w: [270, 300], h: 290,
-    draw(k, f) {
-      const W = f.w;
-      k.fillStyle = f.col.wall;
-      k.fillRect(0, -210, W, 210);
-      k.fillStyle = f.col.trim;
-      k.fillRect(-4, -222, W + 8, 14);
-      k.beginPath(); poly(k, [10, -222, W / 2, -272, W - 10, -222]); k.fill();
-      for (let x = 22; x < W - 30; x += (W - 62) / 5) { k.fillRect(x, -208, 18, 208); k.fillRect(x - 4, -208, 26, 8); }
-      k.fillStyle = f.col.dark;
-      k.fillRect(W * 0.3, -150, W * 0.4, 20);
-      text(k, 'ТЕАТР', W / 2, -139.5, W * 0.36, 13, f.col.trim);
-      k.fillStyle = f.col.deep;
-      for (const x of [W * 0.24, W * 0.5, W * 0.76]) k.fillRect(x - 16, -74, 32, 74);
-      k.fillStyle = f.col.dark;
-      k.fillRect(0, -9, W, 9);
-    },
-  },
-  wall: {       // стена с надписями
-    w: [220, 260], h: 150,
-    draw(k, f) {
-      k.fillStyle = '#CFC6B8';
-      k.fillRect(0, -132, f.w, 132);
-      k.fillStyle = '#B9B0A2';
-      k.fillRect(0, -136, f.w, 6);
-      const marks = [['ЦОЙ ЖИВ', 0.3, -92, 20, '#4A4A4A', -0.05], ['КИНО', 0.74, -98, 16, '#8A3B36', 0.06], ['перемен!', 0.62, -52, 13, '#3B5A7A', -0.04], ['45', 0.16, -44, 15, '#5E7B5C', 0.08], ['сдам', 0.84, -30, 9, '#6B5A7A', 0]];
-      for (const [t, px, y, size, color, rot] of marks) {
-        k.save();
-        k.translate(f.w * px, y);
-        k.rotate(rot);
-        k.globalAlpha = 0.75;
-        text(k, t, 0, 0, f.w * 0.44, size, color, 800, FONT.text);
-        k.restore();
-      }
-      k.globalAlpha = 1;
-    },
-  },
-  /* ── достопримечательности: встают в ряд один раз при входе в район ── */
-  vdnhArch: {   // арка главного входа ВДНХ
-    w: [330, 330], h: 320,
-    draw(k, f) {
-      const W = f.w;
-      k.fillStyle = '#EFEBDD';
-      k.fillRect(0, -200, W, 60);
-      for (const x of [0, 62, 124, W - 186, W - 124, W - 62]) k.fillRect(x, -200, 62 - 26, 200);
-      k.fillStyle = '#F8F5EA';
-      k.fillRect(-6, -212, W + 12, 14);
-      k.fillRect(-4, -146, W + 8, 8);
-      k.fillStyle = '#EFEBDD';
-      k.fillRect(W * 0.3, -246, W * 0.4, 36);
-      k.fillStyle = '#D9C27A';
-      k.fillRect(W * 0.3, -214, W * 0.4, 4);
-      // тракторист и колхозница со снопом
-      k.fillRect(W * 0.5 - 13, -282, 9, 36);
-      k.fillRect(W * 0.5 + 4, -282, 9, 36);
-      k.beginPath(); dot(k, W * 0.5 - 8.5, -288, 6); dot(k, W * 0.5 + 8.5, -288, 6); dot(k, W * 0.5, -306, 11); k.fill();
-      k.fillRect(W * 0.5 - 1.5, -300, 3, 22);
-    },
-  },
-  rocket: {     // ракета «Восток»
-    w: [130, 130], h: 320,
-    draw(k, f) {
-      k.fillStyle = '#C9CCC8';
-      k.beginPath(); poly(k, [20, 0, 34, 0, 70, -150, 60, -154]); k.fill();
-      k.fillRect(10, -14, 70, 14);
-      k.save();
-      k.translate(74, -150);
-      k.rotate(0.3);
-      k.fillStyle = '#F2F2EE';
-      k.beginPath(); poly(k, [-9, 0, 9, 0, 9, -110, 0, -150, -9, -110]); k.fill();
-      k.fillStyle = '#DADAD4';
-      k.beginPath(); poly(k, [-22, 0, -9, 0, -9, -70, -15, -84]); poly(k, [22, 0, 9, 0, 9, -70, 15, -84]); k.fill();
-      k.fillStyle = '#C9584C';
-      k.fillRect(-9, -98, 18, 5);
-      k.restore();
-    },
-  },
-  bridge: {     // Парящий мост в Зарядье
-    w: [430, 430], h: 190,
-    draw(k, f) {
-      const W = f.w;
-      for (let i = 0; i < 4; i++) {
-        const cx = 30 + i * 110;
-        k.fillStyle = i % 2 ? f.col.leaf : f.col.leaf2;
-        k.beginPath(); dot(k, cx, -64, 40); dot(k, cx + 40, -52, 30); k.fill();
-      }
-      k.fillStyle = '#E4E6E8';
-      k.beginPath();
-      poly(k, [0, -40, W * 0.5, -150, W, -40, W, -30, W * 0.5, -134, 0, -30]);
-      k.fill();
-      k.fillStyle = '#C9D3D9';
-      k.beginPath(); poly(k, [0, -40, W * 0.5, -150, W, -40, W, -44, W * 0.5, -162, 0, -44]); k.fill();
-      k.fillStyle = '#D5D8DA';
-      k.fillRect(0, -30, W, 30);
-    },
-  },
-  ges2: {       // ГЭС-2: синие трубы
-    w: [280, 280], h: 320,
-    draw(k, f) {
-      k.fillStyle = '#E4E1D8';
-      k.fillRect(0, -130, 280, 130);
-      k.beginPath(); poly(k, [0, -130, 60, -168, 220, -168, 280, -130]); k.fill();
-      k.fillStyle = '#C3D0DB';
-      k.fillRect(22, -150, 236, 120);
-      k.fillStyle = '#E4E1D8';
-      for (let x = 22; x < 258; x += 24) k.fillRect(x - 1.5, -150, 3, 120);
-      k.fillRect(22, -92, 236, 3);
-      k.fillStyle = '#7F9FC4';
-      for (let i = 0; i < 4; i++) { k.fillRect(56 + i * 46, -318, 16, 152); k.fillRect(53 + i * 46, -322, 22, 6); }
-      k.fillStyle = '#D6D2C8';
-      k.fillRect(0, -10, 280, 10);
-    },
-  },
-};
-
-/* ───────────────────────────── УЛИЦА ─────────────────────────────
-   Рисуются от середины основания. it.prop — серый цвет района, it.leaf — зелень. */
-function crown(ctx, it, blobs) {
-  ctx.fillStyle = it.leaf;
-  ctx.beginPath();
-  for (const [x, y, r] of blobs) dot(ctx, x, y, r);
-  ctx.fill();
-  ctx.fillStyle = it.leaf2;
-  ctx.beginPath();
-  for (let i = 0; i < blobs.length; i += 2) dot(ctx, blobs[i][0] + 8, blobs[i][1] + 10, blobs[i][2] * 0.6);
-  ctx.fill();
-}
-
-const PropArt = {
-  tree: {
-    w: 110,
-    draw(ctx, it) {
-      ctx.fillStyle = it.trunk;
-      ctx.beginPath(); poly(ctx, [-5, 0, 5, 0, 3.5, -110, -3.5, -110]); ctx.fill();
-      crown(ctx, it, [[0, -150, 46], [-32, -116, 34], [34, -120, 36], [4, -108, 30]]);
-    },
-  },
-  treeBig: {
-    w: 150,
-    draw(ctx, it) {
-      ctx.fillStyle = it.trunk;
-      ctx.beginPath(); poly(ctx, [-7, 0, 7, 0, 5, -140, -5, -140]); ctx.fill();
-      ctx.beginPath(); poly(ctx, [0, -90, 3, -96, 36, -138, 32, -140]); poly(ctx, [0, -104, -3, -110, -34, -150, -30, -152]); ctx.fill();
-      crown(ctx, it, [[0, -200, 60], [-48, -156, 44], [50, -160, 46], [-10, -138, 40], [26, -226, 34]]);
-    },
-  },
-  poplar: {
-    w: 60,
-    draw(ctx, it) {
-      ctx.fillStyle = it.trunk;
-      ctx.fillRect(-3, -40, 6, 40);
-      ctx.fillStyle = it.leaf;
-      ctx.beginPath(); ctx.ellipse(0, -138, 24, 108, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = it.leaf2;
-      ctx.beginPath(); ctx.ellipse(6, -126, 12, 76, 0, 0, TAU); ctx.fill();
-    },
-  },
-  lamp: {
-    w: 50,
-    draw(ctx, it) {
-      ctx.fillStyle = it.prop;
-      ctx.beginPath(); poly(ctx, [-3.5, 0, 3.5, 0, 2, -232, -2, -232]); ctx.fill();
-      ctx.fillRect(-6, -10, 12, 10);
-      ctx.fillRect(-2, -234, 34, 3.5);
-      rr(ctx, 22, -234, 22, 8, 4); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.8)';
-      ctx.fillRect(25, -227, 16, 2.5);
-      if (it.note) {                                    // объявление с отрывными телефонами
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(-9, -76, 18, 20);
-        text(ctx, it.note, 0, -69, 16, 5, '#1C1C1C', 900, K.SIGN_FONT.mont);
-        ctx.fillStyle = '#B5B5B5';
-        ctx.fillRect(-6, -64, 12, 1); ctx.fillRect(-6, -61.5, 9, 1);
-        ctx.fillStyle = '#CFCFCF';
-        for (let x = -8; x < 8; x += 3) ctx.fillRect(x, -57, 0.8, 5);
-      }
-    },
-  },
-  lampOld: {    // арбатский фонарь
-    w: 44,
-    draw(ctx, it) {
-      ctx.fillStyle = it.prop;
-      ctx.beginPath(); poly(ctx, [-6, 0, 6, 0, 2.5, -24, 2.5, -118, -2.5, -118, -2.5, -24]); ctx.fill();
-      ctx.fillRect(-20, -120, 40, 3.5);
-      for (const x of [-20, 20]) {
-        ctx.fillStyle = it.prop;
-        ctx.fillRect(x - 1.5, -128, 3, 9);
-        ctx.beginPath(); poly(ctx, [x - 8, -150, x + 8, -150, x + 5.5, -128, x - 5.5, -128]); ctx.fill();
-        ctx.beginPath(); poly(ctx, [x - 10, -150, x + 10, -150, x, -161]); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.75)';
-        ctx.beginPath(); poly(ctx, [x - 5.5, -147, x + 5.5, -147, x + 3.8, -131, x - 3.8, -131]); ctx.fill();
-      }
-    },
-  },
-  busstop: {
-    w: 170,
-    draw(ctx, it) {
-      ctx.fillStyle = 'rgba(255,255,255,.42)';
-      ctx.fillRect(-70, -82, 140, 76);
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(-76, -90, 152, 8);
-      ctx.fillRect(-70, -84, 4, 84);
-      ctx.fillRect(66, -84, 4, 84);
-      ctx.fillRect(-2, -84, 3, 84);
-      ctx.fillRect(-56, -24, 70, 5);
-      ctx.fillRect(-50, -20, 4, 20);
-      ctx.fillRect(4, -20, 4, 20);
-      // панель сбоку: реклама или схема маршрутов
-      if (it.ad) K.adSign(ctx, it.ad[0], it.ad[1], 24, -78, 38, 66);
-      else {
-        rr(ctx, 24, -78, 38, 66, 2); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fill();
-        ctx.fillStyle = it.prop;
-        ctx.fillRect(29, -70, 28, 3);
-        for (let y = -60; y < -20; y += 9) { ctx.fillRect(34, y, 22, 1.6); ctx.beginPath(); dot(ctx, 30.5, y + 0.8, 1.7); ctx.fill(); }
-      }
-      // знак остановки
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(84, -120, 3, 120);
-      rr(ctx, 74, -146, 24, 24, 4); ctx.fill();
-      text(ctx, 'А', 86, -133.5, 18, 14, '#FFFFFF', 900);
-    },
-  },
-  kiosk: {      // ларёк с кофе или едой
-    w: 120, loud: true,
-    draw(ctx, it) {
-      const brand = K.BRANDS[it.brand] || { bg: it.prop, fg: '#FFFFFF' };
-      const tone = brand.bg === '#FFFFFF' ? brand.fg : brand.bg;
-      rr(ctx, -46, -84, 92, 84, 4); ctx.fillStyle = '#F4F4F2'; ctx.fill();
-      ctx.fillStyle = tone;
-      ctx.fillRect(-46, -14, 92, 14);
-      ctx.fillStyle = 'rgba(175,200,212,.95)';
-      ctx.fillRect(-38, -62, 50, 34);
-      ctx.fillStyle = '#4F555C';
-      ctx.fillRect(-40, -64, 54, 2.5); ctx.fillRect(-40, -28, 54, 4); ctx.fillRect(-14, -62, 2, 34);
-      ctx.fillStyle = '#5E646B';
-      ctx.fillRect(20, -62, 20, 62);
-      ctx.fillStyle = 'rgba(175,200,212,.95)';
-      ctx.fillRect(23, -58, 14, 22);
-      ctx.beginPath(); poly(ctx, [-50, -76, 50, -76, 58, -64, -58, -64]); ctx.fillStyle = tone; ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.35)';
-      for (let x = -46; x < 50; x += 18) { ctx.beginPath(); poly(ctx, [x, -76, x + 9, -76, x + 10.5, -64, x + 0.5, -64]); ctx.fill(); }
-      K.sign(ctx, it.brand, -52, -102, 104, 25, { radius: 3 });
-    },
-  },
-  metro: {      // вестибюль метро в настоящую величину
-    w: 230, loud: true,
-    draw(ctx, it) {
-      ctx.fillStyle = 'rgba(205,220,228,.78)';
-      ctx.fillRect(-84, -92, 168, 92);
-      ctx.fillStyle = it.prop;
-      for (let x = -84; x <= 84; x += 28) ctx.fillRect(x - 2, -92, 4, 92);
-      ctx.fillRect(-84, -60, 168, 3);
-      rr(ctx, -96, -108, 192, 18, 5); ctx.fill();
-      text(ctx, 'МЕТРО', 0, -98.5, 90, 10.5, '#FFFFFF');
-      ctx.fillStyle = shade(it.prop, -0.18);
-      ctx.fillRect(-28, -70, 56, 70);
-      ctx.fillStyle = 'rgba(205,220,228,.9)';
-      ctx.fillRect(-24, -66, 23, 62);
-      ctx.fillRect(1, -66, 23, 62);
-      // буква М на столбе
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(104, -150, 5, 150);
-      ctx.beginPath(); ctx.arc(106.5, -172, 24, 0, TAU); ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fill();
-      ctx.lineWidth = 3; ctx.strokeStyle = '#E6A69C'; ctx.stroke();
-      text(ctx, 'М', 106.5, -170, 34, 26, '#E08A7E', 900);
-    },
-  },
-  billboard: {  // рекламный щит
-    w: 230, loud: true,
-    draw(ctx, it) {
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(-58, -96, 7, 96);
-      ctx.fillRect(51, -96, 7, 96);
-      rr(ctx, -106, -204, 212, 112, 5); ctx.fill();
-      K.adSign(ctx, it.ad[0], it.ad[1], -101, -199, 202, 102);
-    },
-  },
-  citylight: {  // сити-формат: реклама или социальный плакат
-    w: 80, loud: true,
-    draw(ctx, it) {
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(-4, -34, 8, 34);
-      rr(ctx, -30, -124, 60, 92, 5); ctx.fill();
-      if (it.ad) K.adSign(ctx, it.ad[0], it.ad[1], -26, -120, 52, 84);
-      else {
-        rr(ctx, -26, -120, 52, 84, 3); ctx.fillStyle = '#FFFFFF'; ctx.fill();
-        const ls = it.meme.split(' '), mid = Math.ceil(ls.length / 2);
-        text(ctx, ls.slice(0, mid).join(' '), 0, -86, 46, 9.5, '#1C1C1C', 900, K.SIGN_FONT.mont);
-        if (ls.length > 1) text(ctx, ls.slice(mid).join(' '), 0, -72, 46, 9.5, '#1C1C1C', 900, K.SIGN_FONT.mont);
-        ctx.fillStyle = '#E0443A';
-        ctx.fillRect(-20, -110, 40, 5);
-      }
-    },
-  },
-  bench: {
-    w: 90,
-    draw(ctx, it) {
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(-34, -17, 68, 4.5);
-      ctx.fillRect(-34, -34, 68, 4.5);
-      ctx.fillRect(-34, -26, 68, 3);
-      ctx.fillRect(-28, -34, 4, 34);
-      ctx.fillRect(24, -34, 4, 34);
-    },
-  },
-  granny: {     // бабушка на лавочке
-    w: 100,
-    draw(ctx, it) {
-      PropArt.bench.draw(ctx, it);
-      ctx.fillStyle = '#B9A6B4';
-      rr(ctx, -12, -44, 22, 30, 7); ctx.fill();
-      ctx.fillRect(-6, -17, 20, 6);
-      ctx.fillRect(9, -17, 6, 17);
-      ctx.fillStyle = '#E8C9A8';
-      ctx.beginPath(); ctx.arc(0, -52, 7.5, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#D9B3B0';
-      ctx.beginPath(); ctx.arc(-0.5, -53.5, 8.6, Math.PI * 0.85, Math.PI * 2.15); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); poly(ctx, [-7, -48, -11, -40, -4, -44]); ctx.fill();
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(18, -40, 2.5, 40);
-    },
-  },
-  playground: { // детская площадка: горка и качели
-    w: 220,
-    draw(ctx, it) {
-      ctx.strokeStyle = it.prop;
-      ctx.lineCap = 'round';
-      ctx.lineWidth = 4.5;
-      ctx.beginPath();
-      ctx.moveTo(-96, 0); ctx.lineTo(-80, -86); ctx.lineTo(-20, -86); ctx.lineTo(-4, 0);
-      ctx.moveTo(-80, -86); ctx.lineTo(-66, 0);
-      ctx.moveTo(-20, -86); ctx.lineTo(-34, 0);
-      ctx.stroke();
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-60, -86); ctx.lineTo(-58, -28); ctx.moveTo(-44, -86); ctx.lineTo(-42, -28);
-      ctx.stroke();
-      ctx.fillStyle = '#D9B3A6';
-      ctx.fillRect(-64, -30, 28, 5);
-      // горка
-      ctx.fillStyle = it.prop;
-      ctx.fillRect(30, -70, 5, 70);
-      ctx.fillRect(56, -70, 5, 70);
-      ctx.fillRect(26, -74, 40, 6);
-      for (let y = -14; y > -70; y -= 14) ctx.fillRect(30, y, 30, 3);
-      ctx.beginPath(); poly(ctx, [60, -70, 68, -70, 112, -6, 112, 0, 100, 0]); ctx.fillStyle = '#C9D8B0'; ctx.fill();
-      ctx.beginPath(); poly(ctx, [24, -74, 46, -100, 68, -74]); ctx.fillStyle = '#D9B3A6'; ctx.fill();
-    },
-  },
-  parkedCar: {  // машина у обочины: светлая, без обводки — это фон
-    w: 180,
-    draw(ctx, it) {
-      ctx.fillStyle = it.car;
-      ctx.beginPath();
-      poly(ctx, [-70, -8, -70, -22, -64, -29, -34, -33, -20, -48, 36, -48, 48, -35, 66, -33, 70, -26, 70, -8]);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.55)';
-      ctx.beginPath(); poly(ctx, [-29, -33.5, -17.5, -45, 5, -45, 5, -33.5]); poly(ctx, [9, -33.5, 9, -45, 34, -45, 42.5, -33.5]); ctx.fill();
-      ctx.fillStyle = shade(it.car, -0.22);
-      ctx.beginPath(); dot(ctx, -42, -11, 11); dot(ctx, 40, -11, 11); ctx.fill();
-    },
-  },
-  parkedVan: {
-    w: 210,
-    draw(ctx, it) {
-      ctx.fillStyle = it.car;
-      ctx.fillRect(-88, -78, 124, 64);
-      ctx.beginPath(); poly(ctx, [38, -14, 38, -62, 62, -62, 78, -42, 88, -38, 88, -14]); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.55)';
-      ctx.beginPath(); poly(ctx, [44, -58, 60, -58, 72, -43, 44, -43]); ctx.fill();
-      ctx.fillStyle = shade(it.car, -0.22);
-      ctx.fillRect(-86, -20, 172, 6);
-      ctx.beginPath(); dot(ctx, -58, -12, 12); dot(ctx, 60, -12, 12); ctx.fill();
-    },
-  },
-  fountain: {
-    w: 200, loud: true,
-    draw(ctx, it) {
-      ctx.strokeStyle = 'rgba(255,255,255,.85)';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      for (const dx of [-46, -24, 0, 24, 46]) { ctx.moveTo(dx * 0.3, -40); ctx.quadraticCurveTo(dx * 0.7, -110 + Math.abs(dx) * 0.6, dx, -30); }
-      ctx.stroke();
-      ctx.fillStyle = '#D9C27A';
-      ctx.fillRect(-10, -56, 20, 30);
-      ctx.beginPath(); ctx.arc(0, -60, 9, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#C7D7DE';
-      ctx.fillRect(-78, -26, 156, 10);
-      ctx.fillStyle = '#E3DFD2';
-      rr(ctx, -84, -20, 168, 20, 5); ctx.fill();
-    },
-  },
-  flower: {     // клумба
-    w: 130,
-    draw(ctx, it) {
-      ctx.fillStyle = '#D6D2C6';
-      rr(ctx, -52, -16, 104, 16, 5); ctx.fill();
-      ctx.fillStyle = it.leaf;
-      ctx.beginPath(); for (let x = -44; x <= 44; x += 11) dot(ctx, x, -18, 8); ctx.fill();
-      ctx.fillStyle = '#E3B5B0';
-      ctx.beginPath(); for (let x = -40; x <= 44; x += 14) dot(ctx, x, -23, 3.4); ctx.fill();
-      ctx.fillStyle = '#EBD9A0';
-      ctx.beginPath(); for (let x = -33; x <= 40; x += 14) dot(ctx, x, -20, 3); ctx.fill();
-    },
-  },
-};
-
-/* Машины на дороге в нижней полосе: тёмные силуэты с огнями */
-function drawTraffic(ctx, t) {
-  const dir = t.v < 0 ? -1 : 1;                  // куда смотрит
-  ctx.save();
-  ctx.translate(t.x, t.y);
-  if (dir < 0) ctx.scale(-1, 1);
-  ctx.fillStyle = t.color;
-  ctx.beginPath();
-  if (t.kind === 'bus') {
-    rr(ctx, -110, -62, 220, 54, 8);
-  } else if (t.kind === 'van') {
-    poly(ctx, [-70, -8, -70, -58, 34, -58, 34, -46, 54, -46, 66, -30, 70, -28, 70, -8]);
-  } else if (t.kind === 'courier') {
-    poly(ctx, [-16, -8, -16, -14, 14, -14, 14, -8]);
-    ctx.rect(-2, -44, 9, 30); ctx.rect(-14, -46, 14, 16);
-    dot(ctx, 3, -50, 6);
-  } else {
-    poly(ctx, [-58, -8, -58, -20, -50, -25, -30, -27, -18, -40, 26, -40, 38, -28, 54, -26, 58, -20, 58, -8]);
-  }
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.1)';
-  if (t.kind === 'bus') { for (let x = -98; x < 96; x += 28) ctx.fillRect(x, -54, 22, 18); }
-  else if (t.kind === 'car' || t.kind === 'taxi') { ctx.beginPath(); poly(ctx, [-26, -28, -16, -37, 24, -37, 33, -28]); ctx.fill(); }
-  ctx.fillStyle = '#0E0E0E';
-  ctx.beginPath();
-  if (t.kind === 'bus') { dot(ctx, -72, -8, 10); dot(ctx, 70, -8, 10); }
-  else if (t.kind === 'van') { dot(ctx, -44, -8, 9.5); dot(ctx, 46, -8, 9.5); }
-  else if (t.kind === 'courier') { dot(ctx, -14, -6, 5); dot(ctx, 13, -6, 5); }
-  else { dot(ctx, -34, -8, 9); dot(ctx, 34, -8, 9); }
-  ctx.fill();
-  if (t.kind === 'taxi') { ctx.fillStyle = '#F2CF3B'; ctx.fillRect(-8, -45, 16, 5); }
-  if (t.kind !== 'courier') {
-    const front = t.kind === 'bus' ? 110 : t.kind === 'van' ? 70 : 58;
-    ctx.fillStyle = 'rgba(255,243,196,.9)';
-    ctx.fillRect(front - 3, -22, 3, 5);
-    ctx.fillStyle = 'rgba(255,77,61,.85)';
-    ctx.fillRect(-front, -22, 3, 5);
-  }
-  ctx.restore();
-}
-
-/* ───────────────────────────── МИР ───────────────────────────── */
-const PARALLAX = { far: 0.06, back: 0.22, front: 0.5, props: 0.72 };
+const PARALLAX = { far: 0.06, back: 0.22, front: 0.5, props: 0.72, fore: 1.35 };
 
 class World {
   constructor(game) {
     this.game = game;
+    this.strips = {};           // растровые полосы неба и дымки: по одной на район и размер экрана
     this.reset(K.LOCATIONS[0]);
   }
 
@@ -1483,6 +55,8 @@ class World {
     this.backSets = [this._newSet(loc, 1)];
     this.front = { items: [], cursor: -40 };
     this.props = { items: [], cursor: 60 };
+    this.fore = { items: [], cursor: 500 };
+    this.decals = { items: [], cursor: 300 };
     this.mix = this._tune(loc);
     this.frontQueue = [];
     this.markTurn = {};
@@ -1490,7 +64,7 @@ class World {
     this.lastStyle = '';
     this.lastProp = '';
     this.clouds = [];
-    for (let i = 0; i < 7; i++) this.clouds.push({ x: this.rng.range(0, 1500), y: this.rng.range(0.1, 0.62), w: this.rng.range(60, 130) });
+    for (let i = 0; i < 6; i++) this.clouds.push({ x: this.rng.range(0, 1500), y: this.rng.range(0.08, 0.5), w: this.rng.range(70, 140), seed: this.rng.int(0, 999) });
     this.traffic = [];
     this.plane = null;
     this.fill();
@@ -1543,10 +117,11 @@ class World {
     this.fill();
   }
 
-  /* После загрузки шрифтов вывески надо перерисовать */
+  /* После загрузки шрифтов надписи надо перерисовать */
   invalidateSprites() {
     for (const s of this.backSets) for (const b of s.items) b.sprite = null;
     for (const f of this.front.items) f.sprite = null;
+    for (const p of this.props.items) p.sprite = null;
   }
 
   fill() {
@@ -1555,6 +130,8 @@ class World {
     for (const s of this.backSets) if (s.target === 1) while (s.cursor < edge) { const it = this._makeBack(s, s.cursor); s.items.push(it); s.cursor += it.advance; }
     while (this.front.cursor < edge) { const it = this._makeFront(this.front.cursor); this.front.items.push(it); this.front.cursor += it.advance; }
     while (this.props.cursor < edge) { const it = this._makeProp(this.props.cursor); this.props.items.push(it); this.props.cursor += it.advance; }
+    while (this.fore.cursor < edge) { const it = this._makeFore(this.fore.cursor); this.fore.items.push(it); this.fore.cursor += it.advance; }
+    while (this.decals.cursor < edge) { const it = this._makeDecal(this.decals.cursor); this.decals.items.push(it); this.decals.cursor += it.advance; }
   }
 
   update(dx, dt) {
@@ -1573,10 +150,10 @@ class World {
         if (!s.target && s.alpha <= 0) sets.splice(i, 1);
       }
     }
-    this.front.cursor -= dx * PARALLAX.front;
-    scroll(this.front.items, dx * PARALLAX.front, 80);
-    this.props.cursor -= dx * PARALLAX.props;
-    scroll(this.props.items, dx * PARALLAX.props, 140);
+    for (const [layer, par, margin] of [[this.front, PARALLAX.front, 80], [this.props, PARALLAX.props, 180], [this.fore, PARALLAX.fore, 80], [this.decals, 1, 60]]) {
+      layer.cursor -= dx * par;
+      scroll(layer.items, dx * par, margin);
+    }
     this.fill();
 
     for (const c of this.clouds) {
@@ -1609,7 +186,8 @@ class World {
       x, kind, w: Math.round(dims.w), h: Math.round(h),
       extra: dims.extra + (dims.spire ? h * dims.spire : 0) + 4,
       seed: r.int(0, 99999),
-      body, dark: shade(body, -0.09), accent: mix(body, '#D2A583', 0.45), win: L.win, lit: L.lit, litPct: 11,
+      body, dark: shade(body, -0.1), accent: mix(body, set.loc.accent || C.brick, 0.4), win: L.win, lit: L.lit || LIT, litPct: 9,
+      gold: mix(C.yellow, body, 0.25),
       advance: dims.w + r.range(-8, 34),
       sprite: null, ps: 0, draw: BackArt[kind].draw,
     };
@@ -1621,7 +199,7 @@ class World {
   }
 
   _makeFront(x) {
-    const loc = this.loc, r = this.rng, F = loc.front;
+    const loc = this.loc, r = this.rng, F = loc.front, c = CONFIG.city;
     let id = '';
     const next = this.frontQueue[0];
     if (next && --next.wait <= 0) id = this.frontQueue.shift().id;
@@ -1637,8 +215,9 @@ class World {
     this.lastStyle = id;
     const wall = r.pick(F.walls);
     const col = {
-      wall, trim: F.trim, glass: F.glass, roof: F.roof, lit: mix(F.glass, '#FFF6D6', 0.6),
-      base: shade(wall, -0.05), dark: shade(wall, -0.16), deep: shade(wall, -0.3), accent: mix(wall, '#D2A583', 0.5),
+      wall, trim: F.trim, glass: F.glass, roof: F.roof, lit: LIT,
+      base: shade(wall, -0.05), dark: shade(wall, -0.14), deep: mix(shade(wall, -0.5), C.ink2, 0.3), accent: mix(wall, loc.accent || C.brick, 0.5),
+      line: shade(wall, -0.26), shadow: 'rgba(23,19,15,.08)', curtain: mix(wall, C.white, 0.62), sash: mix(F.glass, C.white, 0.45), frame: F.trim,
       leaf: loc.foliage[0], leaf2: loc.foliage[1], far: loc.farColor,
     };
     const item = { x, seed: r.int(0, 99999), col, sprite: null, ps: 0, brands: [] };
@@ -1647,8 +226,8 @@ class World {
       item.w = Math.round(r.range(sp.w[0], sp.w[1]));
       item.h = sp.h;
       item.draw = sp.draw;
-      if (id === 'stroyka' && r.chance(CONFIG.city.adChance)) item.ad = this._pickAd(loc, ['developer']);
-      if (id === 'fence' && r.chance(CONFIG.city.adChance)) item.ad = this._pickAd(loc);
+      if (id === 'stroyka' && r.chance(c.adChance)) item.ad = this._pickAd(loc, ['developer']);
+      if (id === 'fence' && r.chance(c.adChance)) item.ad = this._pickAd(loc);
       item.advance = item.w + r.range(6, 30);
     } else {
       const st = STYLES[id];
@@ -1659,8 +238,20 @@ class World {
       item.h = st.groundH + item.floors * st.floorH + 50;
       item.draw = drawFacade;
       if (st.ground === 'shop') this._shopUnits(loc, item);
-      else if (st.ground === 'lobby' && r.chance(CONFIG.city.adChance)) item.brands = [this._pickBrand(loc, K.brandsOf('bank', 'cafe', 'telecom'))];
+      else if (st.ground === 'lobby' && r.chance(c.adChance)) item.brands = [this._pickBrand(loc, K.brandsOf('bank', 'cafe', 'telecom'))];
       if (r.chance(0.3)) item.plate = loc.street;
+      // объявления живут на стенах: лист с хвостиками у подъезда или растяжка на фасаде
+      const bays = Math.max(2, Math.round((item.w - 28) / st.bayW)), bw = (item.w - 28) / bays;
+      if ((st.ground === 'plain' || st.ground === 'rust') && bays > 3 && r.chance(c.notices)) {
+        const free = [];
+        for (let b = 0; b < bays; b++) if (b % 3 !== 1 && b !== Math.floor(bays / 2)) free.push(b);
+        const bay = r.pick(free);
+        const h = Math.min(62, st.groundH - 12), w = Math.min(48, bw * 0.96);
+        item.notice = { bay, x: 14 + (bay + 0.5) * bw - w / 2, w, h, lines: r.pick(K.NOTICES) };
+      } else if (st.win !== 'strip' && item.floors > 1 && r.chance(c.banners)) {
+        const w = Math.min(item.w - 40, r.range(120, 170)), warm = r.chance(0.5);
+        item.banner = { x: r.range(20, item.w - w - 20), w, text: r.pick(K.BANNERS), bg: warm ? C.yellow : C.white, fg: warm ? C.ink2 : C.danger };
+      }
       item.advance = item.w + r.range(-2, 22);
     }
     return item;
@@ -1680,7 +271,7 @@ class World {
     let left = width, guard = 0;
     while (left >= 86 && units.length < count && guard++ < 12) {
       const name = this._nextBrand(loc), b = K.BRANDS[name];
-      if (!b || !need[b.cat]) continue;                 // такси и каршеринг — не магазины
+      if (!b || !need[b.cat]) continue;                 // такси и доставка — не магазины
       const w = Math.min(left, need[b.cat] * r.range(0.94, 1.1));
       units.push({ name, w: Math.round(w) });
       left -= w + 5;
@@ -1694,7 +285,7 @@ class World {
 
   /* Реклама для щита: [бренд, строчка]. cats — только такие типы брендов */
   _pickAd(loc, cats) {
-    let pool = K.brandsOf.apply(null, cats || ['realty', 'developer', 'bank', 'telecom', 'taxi']).filter(n => K.BRANDS[n].ads.length);
+    let pool = K.brandsOf.apply(null, cats || ['realty', 'developer', 'bank', 'telecom', 'taxi', 'delivery']).filter(n => K.BRANDS[n].ads.length);
     if (!cats) pool = pool.concat(loc.brands.filter(n => K.BRANDS[n] && K.BRANDS[n].ads.length));
     const name = this.rng.pick(pool);
     return [name, this.rng.pick(K.BRANDS[name].ads)];
@@ -1705,18 +296,41 @@ class World {
     let kind = r.weighted(this.mix.props);
     if (kind === this.lastProp && PropArt[kind].w > 100) kind = r.weighted(this.mix.props);
     this.lastProp = kind;
-    const s = r.range(0.94, 1.1), prop = shade(loc.farColor, -0.2);
+    const art = PropArt[kind];
+    const s = r.range(0.94, 1.1), prop = mix(C.warm, loc.sky, 0.45);
+    const cars = [C.concrete, C.cool, C.cream, mix(C.brick, C.paper, 0.3), mix(C.blue, C.paper, 0.25), C.white];
+    const lux = loc.tags.includes('premium') || loc.tags.includes('business');
     const item = {
-      x, kind, s, w: PropArt[kind].w * s,
-      prop, trunk: mix(prop, '#B49A80', 0.5), leaf: loc.foliage[0], leaf2: loc.foliage[1],
-      ink: shade(prop, -0.3), car: r.pick(['#DADDE0', '#D3D6CE', '#D8CFC4', '#CBD3DA', '#C9C9C9']),
+      x, kind, s, w: art.w * s, h: (art.h + 8) * s, seed: r.int(0, 99999), sprite: null, ps: 0,
+      prop, trunk: mix(C.ink2, loc.sky, 0.5), leaf: loc.foliage[0], leaf2: loc.foliage[1],
+      ink: mix(C.ink2, loc.sky, 0.38), car: lux && r.chance(0.6) ? mix(C.ink2, loc.sky, 0.4) : mix(r.pick(cars), loc.sky, 0.42), lux,
+      draw(k, it) { k.translate(it.w / 2, 0); k.scale(it.s, it.s); art.draw(k, it); },
     };
     if (kind === 'kiosk') item.brand = this._pickBrand(loc, K.brandsOf('cafe', 'fastfood'));
     if (kind === 'billboard' || (kind === 'busstop' && r.chance(CONFIG.city.adChance))) item.ad = this._pickAd(loc);
-    if (kind === 'citylight') { if (r.chance(0.55)) item.ad = this._pickAd(loc); else item.meme = r.pick(K.MEMES); }
+    if (kind === 'citylight') { if (r.chance(0.5)) item.ad = this._pickAd(loc); else item.meme = r.pick(K.MEMES); }
     if (kind === 'lamp' && r.chance(CONFIG.city.notes)) item.note = r.pick(['СДАМ', 'СНИМУ', 'КУПЛЮ', 'СДАМ']);
     item.advance = item.w + r.range(110, 300);
     return item;
+  }
+
+  /* Передний план: редкие провода, фонари и гирлянды над игровой зоной. Ниже прыжка и карточек не опускаются */
+  _makeFore(x) {
+    const r = this.rng, v = this.game.view, loc = this.loc;
+    const room = v.groundY - 250;                       // всё, что выше, свободно от игры
+    const list = loc.fore || [['wires', 1]];
+    const kind = r.weighted(list), art = ForeArt[kind];
+    const item = { x, kind, w: art.w, seed: r.int(0, 9999), y: Math.max(64, Math.min(room - 70, r.range(70, 160))), skip: room < 150 };
+    item.advance = item.w + r.range(700, 1500);
+    return item;
+  }
+
+  /* То, что нарисовано на дороге: «зебра», люки, буква «А» на выделенной полосе, заплатки */
+  _makeDecal(x) {
+    const r = this.rng;
+    const kind = r.weighted([['manhole', 4], ['patch', 3], ['zebra', 1.4], ['busA', 1.2], ['grate', 2]]);
+    const w = { manhole: 30, patch: 90, zebra: 132, busA: 70, grate: 26 }[kind];
+    return { x, kind, w, seed: r.int(0, 999), advance: w + r.range(240, 620) };
   }
 
   /* Дорога: машины едут в обе стороны независимо от героя */
@@ -1738,7 +352,7 @@ class World {
       this.traffic.push({
         kind: this.rng.weighted(this.loc.traffic), lane, v: vv,
         x: fromLeft ? -260 : v.w + 260, y: 0,
-        color: this.rng.pick(['#2A2A2A', '#303030', '#353535', '#2E3338']),
+        color: this.rng.pick(['#3D3833', '#443E38', '#4A443D', '#3A3B3D']),
       });
     }
   }
@@ -1753,33 +367,54 @@ class World {
     }
   }
 
-  drawSky(ctx) {
-    const v = this.game.view, t = this.skyT, a = this.prevLoc.sky, b = this.loc.sky;
-    const grad = ctx.createLinearGradient(0, 0, 0, v.groundY);
-    grad.addColorStop(0, t >= 1 ? b[0] : mix(a[0], b[0], t));
-    grad.addColorStop(1, t >= 1 ? b[1] : mix(a[1], b[1], t));
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, v.w, v.h);
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.globalAlpha = 0.9;
-    for (const c of this.clouds) {
-      const y = v.groundY * c.y * 0.6 + 30, h = c.w * 0.26;
-      rr(ctx, c.x, y, c.w, h, h / 2);
-      ctx.fill();
-      ctx.beginPath();
-      dot(ctx, c.x + c.w * 0.38, y + h * 0.12, h * 0.55);
-      dot(ctx, c.x + c.w * 0.62, y + h * 0.32, h * 0.4);
-      ctx.fill();
-    }
+  /* Полоса растра: точки тем крупнее, чем ближе к земле. Рисуется один раз на район */
+  _strip(loc, kind, ps) {
+    const key = `${kind}:${loc.id}:${ps}`;
+    if (this.strips[key]) return this.strips[key];
+    const tile = 240, h = kind === 'sky' ? 170 : 64, gap = kind === 'sky' ? 10 : 8;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(tile * ps);
+    c.height = Math.ceil(h * ps);
+    const k = c.getContext('2d');
+    k.scale(ps, ps);
+    const rows = Math.floor(h / (gap * 0.86));
+    if (kind === 'sky') ink.dots(k, 0, 0, tile, h, gap, 3.3, loc.dots || mix(loc.sky, loc.farColor, 0.55), (row, r) => r * Math.pow(row / rows, 1.5));
+    else ink.dots(k, 0, 0, tile, h, gap, 2.5, loc.sky, (row, r) => r * Math.pow(row / rows, 1.2));
+    c.tile = tile; c.h = h;
+    this.strips[key] = c;
+    return c;
+  }
+  _drawStrip(ctx, strip, y, alpha) {
+    const v = this.game.view;
+    ctx.globalAlpha = alpha;
+    for (let x = 0; x < v.w; x += strip.tile) ctx.drawImage(strip, x, y, strip.tile, strip.h);
     ctx.globalAlpha = 1;
+  }
+
+  drawSky(ctx) {
+    const v = this.game.view, t = this.skyT, a = this.prevLoc, b = this.loc, gy = v.groundY;
+    const ps = Math.min(2, v.scale * v.dpr);
+    ctx.fillStyle = t >= 1 ? b.sky : mix(a.sky, b.sky, t);
+    ctx.fillRect(0, 0, v.w, v.h);
+    if (t < 1) this._drawStrip(ctx, this._strip(a, 'sky', ps), gy - 170, 1 - t);
+    this._drawStrip(ctx, this._strip(b, 'sky', ps), gy - 170, t);
+
+    // облака ступеньками: три плашки друг на друге
+    for (const c of this.clouds) {
+      const y = v.groundY * c.y * 0.6 + 34, h = c.w * 0.1, s = c.seed;
+      ctx.fillStyle = C.white;
+      ctx.fillRect(c.x, y, c.w, h);
+      ctx.fillRect(c.x + c.w * (0.14 + (s % 5) * 0.02), y - h, c.w * 0.56, h + 1);
+      ctx.fillRect(c.x + c.w * (0.3 + (s % 3) * 0.04), y - h * 2, c.w * 0.26, h + 1);
+      ctx.fillStyle = mix(b.sky, b.farColor, 0.5);
+      ctx.fillRect(c.x + c.w * 0.06, y + h, c.w * 0.86, 2);
+    }
 
     if (this.plane) {
       const px = this.plane.x, py = v.groundY * this.plane.y + 20;
-      ctx.strokeStyle = 'rgba(255,255,255,.8)';
-      ctx.lineWidth = 2.4;
-      ctx.beginPath(); ctx.moveTo(px - 120, py + 14); ctx.lineTo(px - 8, py + 2); ctx.stroke();
-      ctx.fillStyle = this.loc.farColor;
+      ctx.fillStyle = C.white;
+      ctx.fillRect(px - 120, py + 2, 108, 2.4);
+      ctx.fillStyle = mix(C.ink2, b.sky, 0.45);
       ctx.beginPath();
       poly(ctx, [px - 14, py + 2, px + 16, py - 5, px + 22, py - 7, px + 20, py - 3, px - 10, py + 6]);
       poly(ctx, [px - 2, py + 1, px - 10, py - 9, px - 5, py - 9, px + 8, py - 2]);
@@ -1796,6 +431,7 @@ class World {
     const k = canvas.getContext('2d');
     k.scale(ps, ps);
     k.translate(pad, it.h + (it.extra || 0));
+    if (it.style) k.transform(1, 0, ((it.seed % 7) - 3) * 0.0022, 1, 0, 0);       // дома стоят чуть криво, каждый по-своему
     it.draw(k, it);
     it.sprite = canvas;
     it.ps = ps;
@@ -1827,7 +463,7 @@ class World {
       }
     }
 
-    // Дома и фасады рисуются один раз во внеэкранный холст. То, что ещё за краем экрана,
+    // Дома, фасады и улица рисуются один раз во внеэкранный холст. То, что ещё за краем экрана,
     // готовим заранее и не больше одного за кадр — чтобы не было рывков.
     let budget = 1;
     const ready = (it, pad) => {
@@ -1849,64 +485,118 @@ class World {
     }
     ctx.globalAlpha = 1;
 
+    // провода между крышами
+    const wire = mix(C.ink2, this.loc.sky, 0.55);
+    ctx.strokeStyle = wire;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i + 1 < this.front.items.length; i++) {
+      const a = this.front.items[i], b = this.front.items[i + 1];
+      if (!a.style || !b.style || a.x > v.w) continue;
+      const ya = gy - (a.h - 50), yb = gy - (b.h - 50), x0 = a.x + a.w - 24, x1 = b.x + 26;
+      ctx.moveTo(x0, ya - 4);
+      ctx.quadraticCurveTo((x0 + x1) / 2, Math.max(ya, yb) + 16, x1, yb - 4);
+      if ((a.seed + b.seed) % 2) { ctx.moveTo(x0 - 14, ya - 2); ctx.quadraticCurveTo((x0 + x1) / 2, Math.max(ya, yb) + 28, x1 + 20, yb - 2); }
+    }
+    ctx.stroke();
+
     // фасады
     for (const f of this.front.items) {
       if (!ready(f, 8) || f.x > v.w + 20) continue;
       ctx.drawImage(f.sprite, snap(f.x - f.pad), gy - f.h, f.sw, f.sh);
     }
 
-    // дымка: фон за игровой дорожкой чуть светлее, чтобы препятствия не терялись
-    const sky = this.skyT >= 1 ? this.loc.sky[1] : mix(this.prevLoc.sky[1], this.loc.sky[1], this.skyT);
-    const [r, g, b] = K.util.hexToRgb(sky);
-    const haze = ctx.createLinearGradient(0, gy - 260, 0, gy);
-    haze.addColorStop(0, `rgba(${r},${g},${b},0)`);
-    haze.addColorStop(1, `rgba(${r},${g},${b},0.3)`);
-    ctx.fillStyle = haze;
-    ctx.fillRect(0, gy - 260, v.w, 260);
+    // дымка растром: низ домов светлее, чтобы препятствия не терялись
+    if (this.skyT < 1) this._drawStrip(ctx, this._strip(this.prevLoc, 'haze', ps), gy - 64, (1 - this.skyT) * 0.85);
+    this._drawStrip(ctx, this._strip(this.loc, 'haze', ps), gy - 64, this.skyT * 0.85);
 
     // улица
     for (const it of this.props.items) {
-      if (it.x > v.w + 40) continue;
+      if (!ready(it, 40) || it.x > v.w + 60) continue;
+      ctx.drawImage(it.sprite, snap(it.x - it.pad), gy - it.h, it.sw, it.sh);
+    }
+  }
+
+  /* Передний план рисуется после героя: он ближе всех, но только над игровой зоной */
+  drawFore(ctx) {
+    const v = this.game.view;
+    const c = mix(C.ink2, this.loc.sky, 0.12);
+    for (const it of this.fore.items) {
+      if (it.skip || it.x > v.w + 40 || it.x + it.w < -40) continue;
       ctx.save();
-      ctx.translate(it.x + it.w / 2, gy);
-      ctx.scale(it.s, it.s);
-      PropArt[it.kind].draw(ctx, it);
+      ctx.translate(it.x, 0);
+      ForeArt[it.kind].draw(ctx, it, c);
       ctx.restore();
     }
   }
 
   drawGround(ctx) {
-    const g = this.game, v = g.view, gy = v.groundY, x0 = -60, W = v.w + 120;
+    const g = this.game, v = g.view, gy = v.groundY, x0 = -60, W = v.w + 120, off = this.groundOffset;
 
-    // тротуар
+    // тротуар: плитка в два ряда со смещением
     ctx.fillStyle = C.sidewalk;
     ctx.fillRect(x0, gy, W, 14);
     ctx.fillStyle = C.sidewalkJoint;
+    ctx.fillRect(x0, gy + 7, W, 1);
     ctx.beginPath();
-    for (let x = -(this.groundOffset % 46) - 46; x < v.w + 46; x += 46) ctx.rect(x, gy + 2, 1.5, 12);
+    for (let x = -(off % 23) - 23; x < v.w + 23; x += 23) { ctx.rect(x, gy + 2, 1, 5); ctx.rect(x + 11.5, gy + 8, 1, 6); }
     ctx.fill();
 
-    // асфальт и линия земли
-    ctx.fillStyle = C.ink;
+    // бордюр, асфальт и линия земли
+    ctx.fillStyle = C.asphalt;
     ctx.fillRect(x0, gy + 14, W, v.h - gy + 80);
-    ctx.fillRect(x0, gy, W, 2.5);
+    ctx.fillStyle = '#8F887B';
+    ctx.fillRect(x0, gy + 14, W, 4);
+    ctx.fillStyle = C.ink;
+    ctx.fillRect(x0, gy, W, 2.6);
 
     const lanes = v.band >= 290 ? 2 : v.band >= 200 ? 1 : 0;
+    const mark = '#57514A';
     const dash = y => {
-      ctx.fillStyle = 'rgba(255,255,255,.16)';
+      ctx.fillStyle = mark;
       ctx.beginPath();
-      for (let x = -(this.groundOffset % 78) - 78; x < v.w + 78; x += 78) ctx.rect(x, y, 36, 3.5);
+      for (let x = -(off % 78) - 78; x < v.w + 78; x += 78) ctx.rect(x, y, 36, 3.5);
       ctx.fill();
     };
-    if (lanes === 0) dash(gy + 32);
+    if (lanes === 0) dash(gy + 34);
     else {
+      this._drawDecals(ctx, gy + 18, lanes * 72 - 6);
       // машины на дороге: перед героем, но ниже игровой дорожки
       for (const t of this.traffic) { t.y = gy + 14 + 66 + t.lane * 70; drawTraffic(ctx, t); }
       if (lanes === 2) dash(gy + 14 + 74);
-      ctx.fillStyle = 'rgba(255,255,255,.1)';
+      ctx.fillStyle = mark;
       ctx.fillRect(x0, gy + 14 + lanes * 72 + 6, W, 2.5);
     }
     this._drawBand(ctx, lanes);
+  }
+
+  _drawDecals(ctx, top, h) {
+    const v = this.game.view;
+    for (const d of this.decals.items) {
+      if (d.x > v.w + 10) continue;
+      const x = d.x;
+      if (d.kind === 'manhole') {
+        ctx.fillStyle = '#3A3530';
+        ctx.beginPath(); poly(ctx, [x, top + 16, x + 7, top + 11, x + 23, top + 11, x + 30, top + 16, x + 23, top + 21, x + 7, top + 21]); ctx.fill();
+        ctx.fillStyle = '#211D1A';
+        ctx.fillRect(x + 8, top + 15, 14, 1.4); ctx.fillRect(x + 11, top + 17.6, 8, 1.2);
+      } else if (d.kind === 'grate') {
+        ctx.fillStyle = '#211D1A';
+        ctx.fillRect(x, top + 1, 26, 7);
+        ctx.fillStyle = '#4A443D';
+        for (let i = 0; i < 5; i++) ctx.fillRect(x + 2 + i * 5, top + 2, 2, 5);
+      } else if (d.kind === 'patch') {                  // заплатка: асфальт положили поверх плитки, потом наоборот
+        ctx.fillStyle = '#24211E';
+        ctx.beginPath(); poly(ctx, [x, top + 12, x + 12, top + 6, x + 74, top + 8, x + 90, top + 20, x + 80, top + 34, x + 16, top + 36]); ctx.fill();
+      } else if (d.kind === 'zebra') {                  // жёлто-белая «зебра»
+        for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#B9A04A' : '#B8B2A6'; ctx.beginPath(); poly(ctx, [x + i * 22, top + 4, x + i * 22 + 13, top + 4, x + i * 22 + 9, top + h - 4, x + i * 22 - 4, top + h - 4]); ctx.fill(); }
+      } else if (d.kind === 'busA') {                   // выделенная полоса
+        ctx.fillStyle = '#B9A04A';
+        ctx.beginPath(); poly(ctx, [x, top + 46, x + 20, top + 12, x + 32, top + 12, x + 52, top + 46, x + 42, top + 46, x + 38, top + 38, x + 14, top + 38, x + 10, top + 46]); ctx.fill();
+        ctx.fillStyle = C.asphalt;
+        ctx.beginPath(); poly(ctx, [x + 18, top + 31, x + 26, top + 19, x + 34, top + 31]); ctx.fill();
+      }
+    }
   }
 
   /* Нижняя полоса: район и сколько осталось до следующего */
@@ -1915,53 +605,29 @@ class World {
     const loc = g.location, next = g.nextLocation, m = g.score.meters;
     const span = g.locationTo - g.locationFrom;
     const prog = span > 0 ? clamp((m - g.locationFrom) / span, 0, 1) : 0;
-    const pad = 18, maxW = v.w - pad * 2;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
+    const pad = 18, maxW = v.w - pad * 2, mute = '#8F887B';
 
     if (v.band >= 200) {
       const top = gy + 14 + lanes * 72 + 18;
-      ctx.fillStyle = '#8C8C8C';
-      ctx.font = `700 12px ${FONT.text}`;
-      ctx.fillText('РАЙОН', pad, top + 12);
-
-      let size = Math.min(34, v.w * 0.062);
-      ctx.font = `900 ${size}px ${FONT.display}`;
-      const tw = ctx.measureText(loc.name).width;
-      if (tw > maxW) { size *= maxW / tw; ctx.font = `900 ${size}px ${FONT.display}`; }
-      ctx.fillStyle = C.lime;
-      ctx.fillText(loc.name, pad, top + 22 + size);
-
-      const by = top + 38 + size;
-      rr(ctx, pad, by, maxW, 7, 3.5);
-      ctx.fillStyle = C.ink2;
-      ctx.fill();
-      if (prog > 0.012) { rr(ctx, pad, by, maxW * prog, 7, 3.5); ctx.fillStyle = C.lime; ctx.fill(); }
-      ctx.fillStyle = '#8C8C8C';
-      ctx.font = `700 12px ${FONT.text}`;
-      if (next) ctx.fillText(`дальше — ${next.short} · ${fmt(Math.max(0, Math.ceil(g.locationTo - m)))} м`, pad, by + 26);
-
-      if (v.h - (by + 26) > 64) {
-        ctx.fillStyle = '#3F3F3F';
-        ctx.font = `900 13px ${FONT.display}`;
-        ctx.fillText('KEYSTOMOSCOW', pad, v.h - 30);
-      }
+      T(ctx, 'РАЙОН', pad, top + 8, { size: 15, color: mute, align: 'left', weight: 800 });
+      const size = T(ctx, loc.name, pad, top + 40, { size: Math.min(54, v.w * 0.105), maxW, color: C.lime, align: 'left' });
+      // шкала района: деления вместо скруглённой полоски
+      const by = top + 44 + size * 0.5, n = Math.max(12, Math.round(maxW / 16)), sw = maxW / n;
+      for (let i = 0; i < n; i++) { ctx.fillStyle = (i + 0.5) / n <= prog ? C.lime : '#4A443D'; ctx.fillRect(pad + i * sw, by, sw - 3, 8); }
+      if (next) T(ctx, `дальше — ${next.short} · ${fmt(Math.max(0, Math.ceil(g.locationTo - m)))} м`, pad, by + 23, { size: 15, color: mute, align: 'left', font: FONT.text, weight: 700 });
+      if (v.h - (by + 26) > 64) T(ctx, 'KEYSTOMOSCOW', pad, v.h - 30, { size: 17, color: '#4A443D', align: 'left' });
     } else {
-      ctx.fillStyle = C.lime;
-      ctx.font = `800 10px ${FONT.display}`;
-      ctx.fillText(loc.name, pad, gy + 59);
+      T(ctx, loc.name, pad, gy + 56, { size: 17, color: C.lime, align: 'left' });
       const bx = pad + ctx.measureText(loc.name).width + 14, bw = v.w - bx - pad;
       if (bw > 60) {
-        rr(ctx, bx, gy + 51, bw, 5, 2.5);
-        ctx.fillStyle = C.ink2;
-        ctx.fill();
-        if (prog > 0.012) { rr(ctx, bx, gy + 51, bw * prog, 5, 2.5); ctx.fillStyle = C.lime; ctx.fill(); }
+        const n = Math.max(8, Math.round(bw / 14)), sw = bw / n;
+        for (let i = 0; i < n; i++) { ctx.fillStyle = (i + 0.5) / n <= prog ? C.lime : '#4A443D'; ctx.fillRect(bx + i * sw, gy + 52, sw - 2.5, 6); }
       }
     }
   }
 }
 
 K.World = World;
-K.CityArt = { FarArt, BackArt, STYLES, SPECIAL, PropArt };
+K.PARALLAX = PARALLAX;
 
 })(window.KTM = window.KTM || {});
